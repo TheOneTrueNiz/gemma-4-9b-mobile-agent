@@ -1,0 +1,29 @@
+# Nexus-Gemma .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Large Models
+models/*.gguf
+
+# Local State
+models/*.json
+!models/test_memory.json
+
+# Binaries
+backend/llama-server
+ollama
+
+# OS Clutter
+.DS_Store
+Thumbs.db
+
+# Development
+.python_history
+.bash_history
+.vscode/
+.idea/
