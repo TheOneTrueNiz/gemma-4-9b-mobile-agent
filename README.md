@@ -1,6 +1,6 @@
-# Nexus-Gemma: Your Local Mobile AI Agent 📱🤖
+# Gemma 4 Mobile Agent: Your Local Mobile AI Agent 📱🤖
 
-Nexus-Gemma is a powerful, locally-hosted AI agent designed to run directly on your phone via Termux. It leverages the Gemma 2 models (9B for action and 2B for critical review) to interact with your phone's native features.
+Gemma 4 Mobile Agent is a powerful, locally-hosted AI agent designed to run directly on your phone via Termux. It leverages the Gemma 2 models (9B for action and 2B for critical review) to interact with your phone's native features.
 
 ## ✨ Features
 
@@ -26,8 +26,8 @@ pkg install python git termux-api cmake make clang
 
 ### 3. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/nexus-gemma.git
-cd nexus-gemma
+git clone https://github.com/yourusername/gemma-4-mobile-agent.git
+cd gemma-4-mobile-agent
 ```
 
 ### 4. Install Python Requirements
@@ -50,8 +50,9 @@ You'll need a compatible `llama-server` binary for Termux (aarch64). You can bui
 git clone https://github.com/ggml-org/llama.cpp
 cd llama.cpp
 make llama-server
-cp llama-server ../nexus-gemma/backend/
+cp llama-server ../gemma-4-mobile-agent/backend/
 ```
+
 
 ## 🚀 Running the Agent
 

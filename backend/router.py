@@ -58,8 +58,8 @@ class FastPathRouter:
         return {"response": AVAILABLE_TOOLS['open_url'](urls[site])}
 
     def handle_greeting(self, match):
+        return {"response": "Hello! I am your Gemma 4 Mobile Agent. I am running locally and ready to help."}
 
-        return {"response": "Hello! I am your Gemma assistant. I am running locally and ready to help."}
 
     def handle_brightness(self, match):
         level = int(match.group(2))
