@@ -1,11 +1,12 @@
 # Gemma 4 Mobile Agent: Your Local Mobile AI Agent 📱🤖
 
-Gemma 4 Mobile Agent is a powerful, locally-hosted AI agent designed to run directly on your phone via Termux. It leverages the Gemma 2 models (9B for action and 2B for critical review) to interact with your phone's native features.
+Gemma 4 Mobile Agent is a powerful, locally-hosted AI agent designed to run directly on your phone via Termux. It leverages the latest **Gemma 4** models (released April 2, 2026): **E4B** for action and **E2B** for critical review.
 
 ## ✨ Features
 
 - **Local Execution:** No internet required for reasoning.
 - **Proposer-Critic (SmolClaw):** Dual-model architecture for safer and more reliable tool usage.
+- **Gemma 4 Edge Models:** Native multimodal capabilities (Text, Image, Audio) and MoE architecture for extreme speed on mobile.
 - **Fast-Path Router:** Instant response for common commands without LLM overhead.
 - **Phone Tools:** Control torch, vibrate, battery, location, clipboard, TTS, and more.
 - **Web Search:** Integrated with DuckDuckGo for real-time information.
@@ -35,12 +36,13 @@ cd gemma-4-mobile-agent
 pip install -r requirements.txt
 ```
 
-### 5. Download Gemma 2 Models
-You will need the GGUF versions of Gemma 2 models. Place them in the `models/` directory:
-- `gemma-2-9b-it-Q4_K_M.gguf` (Actor)
-- `gemma-2-2b-it-Q6_K.gguf` (Critic)
+### 5. Download Gemma 4 Models
+You will need the GGUF versions of Gemma 4 models. Place them in the `models/` directory:
+- `gemma-4-e4b-it-q4_k_m.gguf` (Actor - 4B)
+- `gemma-4-e2b-it-q4_k_m.gguf` (Critic - 2B)
 
-*You can download these from Hugging Face.*
+*You can download these from Hugging Face repositories (e.g., bartowski or unsloth).*
+
 
 ### 6. Get `llama-server`
 You'll need a compatible `llama-server` binary for Termux (aarch64). You can build it from `llama.cpp` or find a pre-built binary and place it in `backend/llama-server`.
@@ -66,10 +68,11 @@ Access the UI at: `http://localhost:1337` in your mobile browser.
 ## ⚙️ How it Works
 
 1. **Router:** Checks if the query matches a "Fast-Path" (e.g., "torch on").
-2. **Actor (9B):** If not a fast-path, the Actor model proposes a tool call based on the user's request.
-3. **Critic (2B):** The Critic model reviews the proposed tool call for safety and logic.
+2. **Actor (Gemma 4 E4B):** If not a fast-path, the Actor model proposes a tool call based on the user's request.
+3. **Critic (Gemma 4 E2B):** The Critic model reviews the proposed tool call for safety and logic.
 4. **Tool Execution:** If approved, the tool is executed via `termux-api`.
 5. **Synthesis:** The Actor generates a final response based on the tool result.
+
 
 ## ⚖️ License
 MIT License.

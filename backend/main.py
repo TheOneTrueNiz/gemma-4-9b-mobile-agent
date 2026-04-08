@@ -104,16 +104,17 @@ AVAILABLE_TOOLS["recall"] = memory.recall
 # --- NATIVE LLAMA-SERVER MANAGEMENT (MAS) ---
 MODELS = {
     "actor": {
-        "path": os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/gemma-2-9b-it-Q4_K_M.gguf")),
+        "path": os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/gemma-4-e4b-it-q4_k_m.gguf")),
         "port": "8888",
-        "threads": "6" # Optimize for 8-core CPU
+        "threads": "4" # E4B is smaller, 4 threads is enough and saves battery
     },
     "critic": {
-        "path": os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/gemma-2-2b-it-Q6_K.gguf")),
+        "path": os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/gemma-4-e2b-it-q4_k_m.gguf")),
         "port": "8889",
         "threads": "2" 
     }
 }
+
 SERVER_BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), "./llama-server"))
 
 def start_engine(name, config):
@@ -144,6 +145,10 @@ def start_engine(name, config):
 # Start both engines
 actor_process = start_engine("actor", MODELS["actor"])
 critic_process = start_engine("critic", MODELS["critic"])
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list = []
 
 def format_actor_prompt(message, history):
 
