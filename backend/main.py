@@ -66,47 +66,36 @@ def repair_and_alias_json(json_str):
         return None
 
 
-# --- MEMORY MANAGER ---
-MEMORY_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/memory.json"))
+# --- MEMORY MANAGER (MEMSPIRE) ---
+from memspire import MemSpire
+MEMORY_DB = os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/memspire.db"))
+memory = MemSpire(MEMORY_DB)
 
-class MemoryManager:
-    def __init__(self, file_path):
-        self.file_path = file_path
-        self.memories = self.load()
+def remember_tool(fact, wing="World", floor="General"):
+    """Saves a fact into the hierarchical memory (MemSpire). 
+    Args:
+        fact: The information to remember.
+        wing: High-level domain (e.g., Identity, Projects, World).
+        floor: Category within the wing (e.g., Family, Coding).
+    """
+    return memory.add_fact(wing, floor, fact)
 
-    def load(self):
-        if os.path.exists(self.file_path):
-            try:
-                with open(self.file_path, "r") as f:
-                    return json.load(f)
-            except: return []
-        return []
+def recall_tool(query):
+    """Searches the hierarchical memory for relevant information."""
+    results = memory.recall(query)
+    if not results: return "No relevant memories found."
+    return "\n".join([f"[{w} > {f}] {c}" for w, f, c, t in results])
 
-    def save(self):
-        with open(self.file_path, "w") as f:
-            json.dump(self.memories, f, indent=2)
+AVAILABLE_TOOLS["remember"] = remember_tool
+AVAILABLE_TOOLS["recall"] = recall_tool
 
-    def add(self, fact):
-        self.memories.append(fact)
-        if len(self.memories) > 50: self.memories.pop(0)
-        self.save()
-        return "Fact remembered."
-
-    def recall(self, query=None):
-        if not query: return self.memories[-5:]
-        relevant = [m for m in self.memories if any(word.lower() in m.lower() for word in str(query).split())]
-        return relevant[-5:]
-
-memory = MemoryManager(MEMORY_FILE)
-AVAILABLE_TOOLS["remember"] = memory.add
-AVAILABLE_TOOLS["recall"] = memory.recall
 
 # --- NATIVE LLAMA-SERVER MANAGEMENT (MAS) ---
 MODELS = {
     "actor": {
         "path": os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/gemma-4-e4b-it-q4_k_m.gguf")),
         "port": "8888",
-        "threads": "4" # E4B is smaller, 4 threads is enough and saves battery
+        "threads": "6" # Increased for Snapdragon 8 Gen 3 (8 cores)
     },
     "critic": {
         "path": os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/gemma-4-e2b-it-q4_k_m.gguf")),
@@ -114,7 +103,6 @@ MODELS = {
         "threads": "2" 
     }
 }
-
 SERVER_BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), "./llama-server"))
 
 def start_engine(name, config):
@@ -122,24 +110,30 @@ def start_engine(name, config):
     cmd = [
         SERVER_BIN,
         "-m", config["path"],
-        "-c", "4096",
+        "-c", "2048", # Faster mobile response
         "--port", config["port"],
         "-t", config["threads"],
+        "-b", "512",
         "--flash-attn", "on",
+        "--cache-type-k", "q4_0", # Turbo Quant: KV Cache compression
+        "--cache-type-v", "q4_0",
         "--log-disable"
     ]
+
+
     process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     # Ready check
-    for i in range(60):
+    for i in range(120): # Increased timeout for heavy mobile loading
         try:
             res = requests.get(f"http://localhost:{config['port']}/health", timeout=1)
             if res.status_code == 200:
                 print(f"✅ {name.upper()} is ONLINE (Port {config['port']})")
                 return process
         except:
-            if i % 10 == 0: print(f"  {name.upper()} is loading...")
+            if i % 10 == 0: print(f"  {name.upper()} is loading... ({i}s)")
             time.sleep(1)
+
     return process
 
 # Start both engines
@@ -151,29 +145,31 @@ class ChatRequest(BaseModel):
     history: list = []
 
 def format_actor_prompt(message, history):
+    # Fetch relevant memories from MemSpire
+    relevant_memories = recall_tool(message)
+    mem_str = relevant_memories if "No relevant memories" not in relevant_memories else ""
 
-    relevant_memories = memory.recall(message)
-    mem_str = "\n".join([f"- {m}" for m in relevant_memories])
-    
     tools_info = []
     for name, func in AVAILABLE_TOOLS.items():
-        # Try to extract argument names from docstring or function signature
         import inspect
         sig = inspect.signature(func)
         args_str = ", ".join(sig.parameters.keys())
         tools_info.append(f"  - {name}({args_str}): {func.__doc__}")
-    
+
     tools_list = "\n".join(tools_info)
-    
+
     prompt = f"System: You are the ACTOR, a powerful AI assistant running locally on a phone. Your goal is to help the user using available tools. Output JSON for tool calls.\n"
-    prompt += "When calling a tool, use this exact JSON format: {\"tool\": \"tool_name\", \"args\": {\"arg_name\": \"value\"}}\n\n"
+    prompt += "You have a hierarchical memory system called MemSpire (Wing > Floor > Cell).\n"
+    prompt += "When remembering things, try to categorize them into logical Wings (Identity, World, Projects) and Floors (Family, Hobbies, TaskX).\n"
+    prompt += "JSON FORMAT: {\"tool\": \"tool_name\", \"args\": {\"arg_name\": \"value\"}}\n\n"
     prompt += f"AVAILABLE TOOLS:\n{tools_list}\n\n"
-    if relevant_memories:
-        prompt += f"MEMORY:\n{mem_str}\n\n"
+    if mem_str:
+        prompt += f"RELEVANT MEMORIES (MemSpire):\n{mem_str}\n\n"
     for h in history:
         prompt += f"User: {h['user']}\nAssistant: {h['assistant']}\n"
     prompt += f"User: {message}\nAssistant:"
     return prompt
+
 
 def verify_with_critic(proposal):
     """SmolClaw pattern: Proposer-Critic Split"""
@@ -188,8 +184,9 @@ def verify_with_critic(proposal):
     
     try:
         res = requests.post("http://localhost:8889/completion", json={
-            "prompt": critic_prompt, "n_predict": 32, "stop": ["\n"], "stream": False
+            "prompt": critic_prompt, "n_predict": 16, "stop": ["\n"], "stream": False
         }, timeout=30)
+
         decision = res.json()["content"].strip().upper()
         print(f"⚖️ Critic Decision: {decision}")
         return "APPROVED" in decision
@@ -200,17 +197,28 @@ def verify_with_critic(proposal):
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
+    print(f"📥 Incoming message: {request.message}")
+    
     # 1. Fast-Path
     fast_response = router.route(request.message)
-    if fast_response: return fast_response
+    if fast_response: 
+        print(f"⚡ Fast-Path match: {fast_response['response'][:50]}...")
+        return fast_response
 
     # 2. Actor Proposes
+    print("🤖 ACTOR is thinking...")
     prompt = format_actor_prompt(request.message, request.history)
     try:
         res = requests.post("http://localhost:8888/completion", json={
             "prompt": prompt, "n_predict": 512, "stop": ["User:", "\n\n"], "stream": False
         }, timeout=120)
+        
+        if res.status_code != 200:
+            print(f"❌ ACTOR error: {res.status_code} - {res.text}")
+            return {"response": f"Error: Actor engine returned {res.status_code}"}
+            
         content = res.json()["content"].strip()
+        print(f"🧠 ACTOR proposal: {content[:100]}...")
         
         # 3. Repair & Validate Tool Usage
         if "{" in content and "}" in content:
@@ -220,31 +228,41 @@ async def chat(request: ChatRequest):
             # SmolClaw Repair Layer
             tool_call = repair_and_alias_json(tool_json_raw)
             
-            if tool_call and verify_with_critic(json.dumps(tool_call)):
-                tool_name = tool_call.get("tool")
-                args = tool_call.get("args", {})
-                
-                if tool_name in AVAILABLE_TOOLS:
-                    print(f"⚙️ Executing tool: {tool_name}")
-                    try:
-                        result = AVAILABLE_TOOLS[tool_name](**args)
-                    except Exception as te:
-                        result = f"Error executing tool: {str(te)}"
+            if tool_call:
+                print(f"⚙️ Validated tool call: {tool_call['tool']}")
+                if verify_with_critic(json.dumps(tool_call)):
+                    tool_name = tool_call.get("tool")
+                    args = tool_call.get("args", {})
                     
-                    # 4. Final Synthesis
-                    final_res = requests.post("http://localhost:8888/completion", json={
-                        "prompt": prompt + content + f"\nTool Result: {json.dumps(result)}\nAssistant:",
-                        "n_predict": 256, "stop": ["User:", "\n\n"], "stream": False
-                    }, timeout=120)
-                    return {"response": final_res.json()["content"].strip(), "tool_used": tool_name}
-            else:
-                if tool_call:
+                    if tool_name in AVAILABLE_TOOLS:
+                        print(f"🚀 Executing tool: {tool_name}")
+                        try:
+                            result = AVAILABLE_TOOLS[tool_name](**args)
+                        except Exception as te:
+                            result = f"Error executing tool: {str(te)}"
+                        
+                        print(f"✅ Tool Result: {str(result)[:100]}...")
+                        
+                        # 4. Final Synthesis
+                        print("✍️ Synthesizing final response...")
+                        final_res = requests.post("http://localhost:8888/completion", json={
+                            "prompt": prompt + content + f"\nTool Result: {json.dumps(result)}\nAssistant:",
+                            "n_predict": 256, "stop": ["User:", "\n\n"], "stream": False
+                        }, timeout=120)
+                        return {"response": final_res.json()["content"].strip(), "tool_used": tool_name}
+                else:
+                    print("⚖️ CRITIC REJECTED the tool call.")
                     return {"response": "My tool request was rejected by my critic. How else can I help?"}
+            else:
+                print("🛠️ JSON Repair failed to produce a valid tool call.")
                 
     except Exception as e:
+        print(f"⚠️ Chat Exception: {str(e)}")
         return {"response": f"Error: {str(e)}"}
     
+    print("📤 Returning plain text response.")
     return {"response": content}
+
 
 if __name__ == "__main__":
     import uvicorn
