@@ -25,7 +25,7 @@
 
         function App() {
             const [messages, setMessages] = useState([
-                { user: "", assistant: "Hello! I'm your Gemma 4 Mobile Agent. I'm ready to help with your phone, search the web, or access your files.", trace: [], traceSummary: [], mode: "system", requestId: "welcome" }
+                { user: "", assistant: "Hello! I'm your Gemma 4 Mobile Agent. I'm ready to help with your phone, search the web, or access your files.", trace: [], traceSummary: [], mode: "system", requestId: "welcome", requestDurationMs: null }
             ]);
             const [input, setInput] = useState("");
             const [loading, setLoading] = useState(false);
@@ -53,7 +53,7 @@
                 setInput("");
                 setLoading(true);
                 
-                setMessages(prev => [...prev, { user: userMessage, assistant: "Thinking...", trace: [], traceSummary: [], mode: "pending", requestId: `pending-${Date.now()}` }]);
+                setMessages(prev => [...prev, { user: userMessage, assistant: "Thinking...", trace: [], traceSummary: [], mode: "pending", requestId: `pending-${Date.now()}`, requestDurationMs: null }]);
 
                 try {
                     const history = messages.filter(m => m.user).map(m => ({ user: m.user, assistant: m.assistant }));
@@ -71,6 +71,7 @@
                         updated[updated.length - 1].traceSummary = data.trace_summary || [];
                         updated[updated.length - 1].mode = data.mode || "agentic";
                         updated[updated.length - 1].requestId = data.request_id || updated[updated.length - 1].requestId;
+                        updated[updated.length - 1].requestDurationMs = data.request_duration_ms;
                         return updated;
                     });
                 } catch (error) {
@@ -80,6 +81,7 @@
                         updated[updated.length - 1].trace = [{ type: "exception", message: String(error) }];
                         updated[updated.length - 1].traceSummary = [`exception: ${String(error)}`];
                         updated[updated.length - 1].mode = "error";
+                        updated[updated.length - 1].requestDurationMs = null;
                         return updated;
                     });
                 } finally {
@@ -161,6 +163,11 @@
                                 {showTrace && m.traceSummary && m.traceSummary.length > 0 && (
                                     <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                                         <div className="mb-2 font-semibold uppercase tracking-wide text-amber-700">Trace Summary</div>
+                                        {m.requestDurationMs !== null && (
+                                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                                                Request Duration: {m.requestDurationMs}ms
+                                            </div>
+                                        )}
                                         <div className="space-y-1">
                                             {m.traceSummary.map((line, idx) => (
                                                 <div key={idx} className="whitespace-pre-wrap">{line}</div>

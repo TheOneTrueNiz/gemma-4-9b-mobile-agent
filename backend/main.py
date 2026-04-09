@@ -263,7 +263,7 @@ def summarize_trace(trace):
     return lines
 
 
-def make_response(response, trace=None, mode="agentic", request_id=None):
+def make_response(response, trace=None, mode="agentic", request_id=None, request_duration_ms=None):
     active_trace = trace or []
     return {
         "response": response,
@@ -271,6 +271,7 @@ def make_response(response, trace=None, mode="agentic", request_id=None):
         "trace_summary": summarize_trace(active_trace),
         "mode": mode,
         "request_id": request_id,
+        "request_duration_ms": request_duration_ms,
     }
 
 def format_actor_prompt(message, history):
@@ -359,6 +360,7 @@ def tool_call_signature(tool_name, args):
 @app.post("/chat")
 async def chat(request: ChatRequest):
     print(f"📥 Incoming message: {request.message}")
+    request_started_at = time.time()
     request_id = uuid.uuid4().hex[:8]
     trace = [{
         "type": "request",
@@ -369,6 +371,7 @@ async def chat(request: ChatRequest):
             "Error: actor engine is offline. Check the model path and llama-server binary.",
             trace=trace + [{"type": "engine", "status": "offline"}],
             request_id=request_id,
+            request_duration_ms=int((time.time() - request_started_at) * 1000),
         )
     
     # 1. Fast-Path
@@ -380,6 +383,7 @@ async def chat(request: ChatRequest):
             trace=trace + fast_response.get("trace", []),
             mode="fast_path",
             request_id=request_id,
+            request_duration_ms=int((time.time() - request_started_at) * 1000),
         )
 
     # 2. Agentic Loop (Max 3 steps)
@@ -401,6 +405,7 @@ async def chat(request: ChatRequest):
                     f"Error: Actor engine returned {res.status_code}",
                     trace=trace + [{"type": "actor", "step": step + 1, "status": "http_error", "status_code": res.status_code}],
                     request_id=request_id,
+                    request_duration_ms=int((time.time() - request_started_at) * 1000),
                 )
                 
             content = res.json()["content"].strip()
@@ -514,9 +519,15 @@ async def chat(request: ChatRequest):
                 f"Error: {str(e)}",
                 trace=trace + [{"type": "exception", "step": step + 1, "message": str(e)}],
                 request_id=request_id,
+                request_duration_ms=int((time.time() - request_started_at) * 1000),
             )
     
-    return make_response(last_content, trace=trace, request_id=request_id)
+    return make_response(
+        last_content,
+        trace=trace,
+        request_id=request_id,
+        request_duration_ms=int((time.time() - request_started_at) * 1000),
+    )
 
 
 

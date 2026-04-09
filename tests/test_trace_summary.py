@@ -16,9 +16,16 @@ class TraceSummaryTests(unittest.TestCase):
         self.assertIn("results=3", summary[2])
 
     def test_make_response_includes_trace_summary(self):
-        payload = make_response("ok", trace=[{"type": "request", "message": "hi"}], mode="fast_path", request_id="abc")
+        payload = make_response(
+            "ok",
+            trace=[{"type": "request", "message": "hi"}],
+            mode="fast_path",
+            request_id="abc",
+            request_duration_ms=42,
+        )
         self.assertIn("trace_summary", payload)
         self.assertEqual(payload["trace_summary"][0], "request: hi")
+        self.assertEqual(payload["request_duration_ms"], 42)
 
 
 if __name__ == "__main__":
