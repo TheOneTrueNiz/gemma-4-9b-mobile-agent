@@ -25,7 +25,7 @@
 
         function App() {
             const [messages, setMessages] = useState([
-                { user: "", assistant: "Hello! I'm your Gemma 4 Mobile Agent. I'm ready to help with your phone, search the web, or access your files.", trace: [], traceSummary: [], mode: "system", requestId: "welcome", requestDurationMs: null }
+                { user: "", assistant: "Hello! I'm your Gemma 4 Mobile Agent. I'm ready to help with your phone, search the web, or access your files.", trace: [], traceSummary: [], mode: "system", requestId: "welcome", requestDurationMs: null, showRawTrace: false }
             ]);
             const [input, setInput] = useState("");
             const [loading, setLoading] = useState(false);
@@ -53,7 +53,7 @@
                 setInput("");
                 setLoading(true);
                 
-                setMessages(prev => [...prev, { user: userMessage, assistant: "Thinking...", trace: [], traceSummary: [], mode: "pending", requestId: `pending-${Date.now()}`, requestDurationMs: null }]);
+                setMessages(prev => [...prev, { user: userMessage, assistant: "Thinking...", trace: [], traceSummary: [], mode: "pending", requestId: `pending-${Date.now()}`, requestDurationMs: null, showRawTrace: false }]);
 
                 try {
                     const history = messages.filter(m => m.user).map(m => ({ user: m.user, assistant: m.assistant }));
@@ -103,6 +103,17 @@
             const visibleTrace = (trace) => {
                 if (!trace || traceFilter === "all") return trace || [];
                 return trace.filter(item => item.type === traceFilter);
+            };
+
+            const toggleRawTrace = (index) => {
+                setMessages(prev => {
+                    const updated = [...prev];
+                    updated[index] = {
+                        ...updated[index],
+                        showRawTrace: !updated[index].showRawTrace,
+                    };
+                    return updated;
+                });
             };
 
 
@@ -162,12 +173,24 @@
                                 </div>
                                 {showTrace && m.traceSummary && m.traceSummary.length > 0 && (
                                     <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                                        <div className="mb-2 font-semibold uppercase tracking-wide text-amber-700">Trace Summary</div>
-                                        {m.requestDurationMs !== null && (
-                                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                                                Request Duration: {m.requestDurationMs}ms
+                                        <div className="mb-2 flex items-center justify-between gap-2">
+                                            <div>
+                                                <div className="font-semibold uppercase tracking-wide text-amber-700">Trace Summary</div>
+                                                {m.requestDurationMs !== null && (
+                                                    <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                                                        Request Duration: {m.requestDurationMs}ms
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
+                                            {visibleTrace(m.trace).length > 0 && (
+                                                <button
+                                                    onClick={() => toggleRawTrace(i)}
+                                                    className="rounded-full border border-amber-300 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800"
+                                                >
+                                                    {m.showRawTrace ? "Hide Raw Trace" : "Show Raw Trace"}
+                                                </button>
+                                            )}
+                                        </div>
                                         <div className="space-y-1">
                                             {m.traceSummary.map((line, idx) => (
                                                 <div key={idx} className="whitespace-pre-wrap">{line}</div>
@@ -175,7 +198,7 @@
                                         </div>
                                     </div>
                                 )}
-                                {showTrace && visibleTrace(m.trace).length > 0 && (
+                                {showTrace && m.showRawTrace && visibleTrace(m.trace).length > 0 && (
                                     <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
                                         <div className="mb-2 flex items-center justify-between font-semibold uppercase tracking-wide text-slate-500">
                                             <span>{m.mode || "agentic"} trace</span>
