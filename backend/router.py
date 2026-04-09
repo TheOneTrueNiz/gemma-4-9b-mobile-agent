@@ -6,6 +6,7 @@ import os
 # Add tools to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from tools.phone_tools import AVAILABLE_TOOLS
+from backend.safety import validate_tool_call
 
 class FastPathRouter:
     def __init__(self):
@@ -61,19 +62,27 @@ class FastPathRouter:
             "bing": "https://www.bing.com",
             "duckduckgo": "https://www.duckduckgo.com"
         }
-        return {"response": AVAILABLE_TOOLS['open_url'](urls[site])}
+        return self.execute_tool("open_url", {"url": urls[site]}, f"open {site}")
 
     def handle_greeting(self, match):
         return {"response": "Hello! I am your Gemma 4 Mobile Agent. I am running locally and ready to help."}
 
     def handle_web_search(self, match):
         query = match.group(3).strip().strip("'\"")
-        return {"response": json.dumps(AVAILABLE_TOOLS["web_search"](query))}
+        result = AVAILABLE_TOOLS["web_search"](query)
+        if isinstance(result, dict) and result.get("results"):
+            lines = [f"Search results for '{query}':"]
+            if result.get("summary"):
+                lines.append(result["summary"])
+            for item in result["results"][:3]:
+                lines.append(f"- {item['title']}: {item['url']}")
+            return {"response": "\n".join(lines)}
+        return {"response": json.dumps(result)}
 
 
     def handle_brightness(self, match):
         level = int(match.group(2))
-        return {"response": AVAILABLE_TOOLS['set_brightness'](level)}
+        return self.execute_tool("set_brightness", {"level": level}, match.string)
 
     def handle_list_files(self, match):
         path = match.group(2).strip()
@@ -82,8 +91,17 @@ class FastPathRouter:
             path = os.path.expanduser("~/storage/downloads")
         elif "dcim" in path.lower() or "photos" in path.lower():
             path = os.path.expanduser("~/storage/dcim")
-            
-        return {"response": f"Files in {path}:\n" + "\n".join(AVAILABLE_TOOLS['list_files'](path)[:10])}
+
+        return self.execute_tool("list_files", {"directory": path}, match.string, formatter=lambda result: f"Files in {path}:\n" + "\n".join(result[:10]))
+
+    def execute_tool(self, tool_name, args, user_message, formatter=None):
+        allowed, normalized_args, reason = validate_tool_call(AVAILABLE_TOOLS, tool_name, args, user_message)
+        if not allowed:
+            return {"response": f"Blocked tool call: {reason}"}
+        result = AVAILABLE_TOOLS[tool_name](**normalized_args)
+        if formatter:
+            return {"response": formatter(result)}
+        return {"response": result}
 
     def route(self, message):
         """Checks if a message matches any fast-path patterns."""

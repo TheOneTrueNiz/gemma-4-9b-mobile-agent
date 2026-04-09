@@ -2,8 +2,16 @@ import subprocess
 import json
 import os
 import glob
+import re
 import urllib.request
 import urllib.parse
+from html import unescape
+
+import requests
+
+SEARCH_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) GemmaMobileAgent/1.0"
+}
 
 def run_termux_command(command):
     try:
@@ -80,21 +88,83 @@ def search_files(pattern, directory="."):
     """Searches for files matching a pattern (e.g., *.jpg)."""
     return glob.glob(os.path.join(directory, pattern), recursive=True)
 
+def strip_html(value):
+    value = re.sub(r"<[^>]+>", "", value or "")
+    return unescape(value).strip()
+
+def normalize_search_result_url(url):
+    url = unescape(url)
+    if url.startswith("//"):
+        url = "https:" + url
+    parsed = urllib.parse.urlparse(url)
+    if parsed.netloc.endswith("duckduckgo.com"):
+        redirected = urllib.parse.parse_qs(parsed.query).get("uddg")
+        if redirected:
+            return urllib.parse.unquote(redirected[0])
+    return url
+
+def extract_duckduckgo_html_results(html):
+    results = []
+    pattern = re.compile(
+        r'<a[^>]*class="result__a"[^>]*href="(?P<url>[^"]+)"[^>]*>(?P<title>.*?)</a>.*?'
+        r'(?:<a[^>]*class="result__snippet"[^>]*>|<div[^>]*class="result__snippet"[^>]*>)(?P<snippet>.*?)</(?:a|div)>',
+        re.S,
+    )
+    for match in pattern.finditer(html):
+        url = normalize_search_result_url(match.group("url"))
+        results.append({
+            "title": strip_html(match.group("title")),
+            "url": url,
+            "snippet": strip_html(match.group("snippet")),
+        })
+    return results
+
+def fetch_instant_answer(query):
+    encoded_query = urllib.parse.quote(query)
+    url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&no_redirect=1"
+    with urllib.request.urlopen(url, timeout=15) as response:
+        data = json.loads(response.read().decode())
+    abstract = data.get("AbstractText", "").strip()
+    return {
+        "abstract": abstract,
+        "source": data.get("AbstractSource", "").strip(),
+        "url": data.get("AbstractURL", "").strip(),
+    }
+
+def fetch_html_search_results(query):
+    res = requests.get(
+        "https://html.duckduckgo.com/html/",
+        params={"q": query},
+        headers=SEARCH_HEADERS,
+        timeout=20,
+    )
+    res.raise_for_status()
+    return extract_duckduckgo_html_results(res.text)
+
 def web_search(query):
     """Performs a web search to find current information."""
     try:
-        # Using a public SearXNG instance for quick search
-        encoded_query = urllib.parse.quote(query)
-        url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1"
-        with urllib.request.urlopen(url) as response:
-            data = json.loads(response.read().decode())
-            abstract = data.get("AbstractText", "")
-            results = [r.get("Text") for r in data.get("RelatedTopics", []) if isinstance(r, dict) and "Text" in r][:3]
-            if not abstract and not results:
-                return "No direct results found. Try a broader query."
-            return {"abstract": abstract, "related": results}
+        query = (query or "").strip()
+        if not query:
+            return {"error": "Empty search query."}
+
+        instant = fetch_instant_answer(query)
+        results = fetch_html_search_results(query)[:5]
+
+        if not instant["abstract"] and not results:
+            return {"query": query, "summary": "No direct results found. Try a broader query.", "results": []}
+
+        summary = instant["abstract"] or (results[0]["snippet"] if results else "")
+        return {
+            "query": query,
+            "summary": summary,
+            "instant_answer": instant["abstract"],
+            "instant_source": instant["source"],
+            "instant_url": instant["url"],
+            "results": results,
+        }
     except Exception as e:
-        return f"Search error: {str(e)}"
+        return {"error": f"Search error: {str(e)}"}
 
 def tts_speak(text):
     """Speaks the given text out loud using the phone's text-to-speech engine."""

@@ -24,6 +24,7 @@ if os.path.exists(os.path.join(MEMSPIRE_REPO, "memspire", "__init__.py")) and ME
 
 from tools.phone_tools import AVAILABLE_TOOLS
 from backend.router import router
+from backend.safety import validate_tool_call
 
 # --- SMOLCLAW PATTERN: ARGUMENT ALIASING & REPAIR ---
 ARG_ALIASES = {
@@ -66,7 +67,6 @@ def repair_and_alias_json(json_str):
     except Exception as e:
         print(f"🛠️ JSON Repair failed: {e}")
         return None
-
 
 # --- MEMORY MANAGER (MEMSPIRE) ---
 from memspire import MemSpire
@@ -209,6 +209,8 @@ def format_actor_prompt(message, history):
 
     prompt = f"System: You are the ACTOR, a powerful AI assistant running locally on a phone. Your goal is to help the user using available tools. Output JSON for tool calls.\n"
     prompt += "You have a hierarchical memory system called MemSpire (Wing > Floor > Cell).\n"
+    prompt += "Never access sensitive system paths like /proc, /sys, /dev, /system, /vendor, /odm, /apex, /etc, or /data.\n"
+    prompt += "Use send_sms only when the user explicitly asks to send a text message.\n"
     prompt += "IMPORTANT: Do NOT output code blocks (```). Do NOT explain your plan. ONLY output raw JSON when you need a tool.\n"
     prompt += "JSON FORMAT: {\"tool\": \"tool_name\", \"args\": {\"arg_name\": \"value\"}}\n\n"
     prompt += "EXAMPLE MULTI-STEP:\nUser: What's the weather like here?\nAssistant: {\"tool\": \"get_location\", \"args\": {}}\nTool Result: {\"latitude\": 40.7, \"longitude\": -74.0}\nAssistant: {\"tool\": \"web_search\", \"args\": {\"query\": \"weather in New York\"}}\n\n"
@@ -289,6 +291,13 @@ async def chat(request: ChatRequest):
                 if tool_call and verify_with_critic(json.dumps(tool_call)):
                     tool_name = tool_call.get("tool")
                     args = tool_call.get("args", {})
+                    is_valid, args, validation_error = validate_tool_call(AVAILABLE_TOOLS, tool_name, args, request.message)
+                    if not is_valid:
+                        result = f"Blocked tool call: {validation_error}"
+                        print(f"🛑 {result}")
+                        current_prompt += f"{content}\nTool Result: {json.dumps(result)}\nAssistant:"
+                        last_content = result
+                        continue
                     
                     if tool_name in AVAILABLE_TOOLS:
                         print(f"🚀 Executing tool: {tool_name}")

@@ -29,3 +29,4 @@ Thumbs.db
 .bash_history
 .vscode/
 .idea/
+bridge.py
