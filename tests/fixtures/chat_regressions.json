@@ -1,0 +1,37 @@
+[
+  {
+    "name": "battery_fast_path",
+    "message": "battery",
+    "expected_mode": "fast_path",
+    "response_contains": [
+      "Battery Status:"
+    ],
+    "trace_types": [
+      "request",
+      "fast_path_tool"
+    ]
+  },
+  {
+    "name": "blocked_sensitive_path",
+    "message": "list files in /etc",
+    "expected_mode": "fast_path",
+    "response_contains": [
+      "Blocked tool call: Path not allowed: /etc"
+    ],
+    "trace_types": [
+      "request",
+      "fast_path_tool"
+    ]
+  },
+  {
+    "name": "search_fast_path",
+    "message": "search the web for termux llama.cpp android",
+    "expected_mode": "fast_path",
+    "response_contains": [
+      "Search results for 'termux llama.cpp android':"
+    ],
+    "trace_types": [
+      "request"
+    ]
+  }
+]
