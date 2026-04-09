@@ -11,6 +11,7 @@ import subprocess
 import time
 import requests
 import re
+import uuid
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
@@ -193,6 +194,15 @@ class ChatRequest(BaseModel):
     message: str
     history: list = []
 
+
+def make_response(response, trace=None, mode="agentic", request_id=None):
+    return {
+        "response": response,
+        "trace": trace or [],
+        "mode": mode,
+        "request_id": request_id,
+    }
+
 def format_actor_prompt(message, history):
     # Fetch relevant memories from MemSpire
     relevant_memories = recall_tool(message)
@@ -254,14 +264,28 @@ def verify_with_critic(proposal):
 @app.post("/chat")
 async def chat(request: ChatRequest):
     print(f"📥 Incoming message: {request.message}")
+    request_id = uuid.uuid4().hex[:8]
+    trace = [{
+        "type": "request",
+        "message": request.message,
+    }]
     if not ensure_actor_engine():
-        return {"response": "Error: actor engine is offline. Check the model path and llama-server binary."}
+        return make_response(
+            "Error: actor engine is offline. Check the model path and llama-server binary.",
+            trace=trace + [{"type": "engine", "status": "offline"}],
+            request_id=request_id,
+        )
     
     # 1. Fast-Path
     fast_response = router.route(request.message)
     if fast_response: 
         print(f"⚡ Fast-Path match: {fast_response['response'][:50]}...")
-        return fast_response
+        return make_response(
+            fast_response["response"],
+            trace=trace + fast_response.get("trace", []),
+            mode="fast_path",
+            request_id=request_id,
+        )
 
     # 2. Agentic Loop (Max 3 steps)
     current_prompt = format_actor_prompt(request.message, request.history)
@@ -277,24 +301,53 @@ async def chat(request: ChatRequest):
             }, timeout=120)
             
             if res.status_code != 200:
-                return {"response": f"Error: Actor engine returned {res.status_code}"}
+                return make_response(
+                    f"Error: Actor engine returned {res.status_code}",
+                    trace=trace + [{"type": "actor", "step": step + 1, "status": "http_error", "status_code": res.status_code}],
+                    request_id=request_id,
+                )
                 
             content = res.json()["content"].strip()
             last_content = content
+            trace.append({
+                "type": "actor",
+                "step": step + 1,
+                "status": "ok",
+                "content_preview": content[:240],
+            })
             
             # Check for tool usage
             if "{" in content and "}" in content:
                 start, end = content.find("{"), content.rfind("}") + 1
                 tool_json_raw = content[start:end]
                 tool_call = repair_and_alias_json(tool_json_raw)
+                trace.append({
+                    "type": "tool_parse",
+                    "step": step + 1,
+                    "raw": tool_json_raw[:240],
+                    "parsed": tool_call,
+                })
                 
                 if tool_call and verify_with_critic(json.dumps(tool_call)):
+                    trace.append({
+                        "type": "critic",
+                        "step": step + 1,
+                        "status": "approved",
+                    })
                     tool_name = tool_call.get("tool")
                     args = tool_call.get("args", {})
                     is_valid, args, validation_error = validate_tool_call(AVAILABLE_TOOLS, tool_name, args, request.message)
                     if not is_valid:
                         result = f"Blocked tool call: {validation_error}"
                         print(f"🛑 {result}")
+                        trace.append({
+                            "type": "tool_execution",
+                            "step": step + 1,
+                            "tool": tool_name,
+                            "args": args,
+                            "status": "blocked",
+                            "reason": validation_error,
+                        })
                         current_prompt += f"{content}\nTool Result: {json.dumps(result)}\nAssistant:"
                         last_content = result
                         continue
@@ -305,21 +358,40 @@ async def chat(request: ChatRequest):
                             result = AVAILABLE_TOOLS[tool_name](**args)
                         except Exception as te:
                             result = f"Error: {str(te)}"
+                        trace.append({
+                            "type": "tool_execution",
+                            "step": step + 1,
+                            "tool": tool_name,
+                            "args": args,
+                            "status": "ok" if not str(result).startswith("Error:") else "error",
+                            "result_preview": str(result)[:240],
+                        })
                         
                         print(f"✅ Tool Result: {str(result)[:50]}...")
                         # Feed result back and loop
                         current_prompt += f"{content}\nTool Result: {json.dumps(result)}\nAssistant:"
                         continue 
+                elif tool_call:
+                    trace.append({
+                        "type": "critic",
+                        "step": step + 1,
+                        "status": "rejected",
+                        "proposal": tool_call,
+                    })
             
             # If no tool call or finished, return final content
             print("📤 Returning final response.")
-            return {"response": content}
+            return make_response(content, trace=trace, request_id=request_id)
                 
         except Exception as e:
             print(f"⚠️ Chat Exception: {str(e)}")
-            return {"response": f"Error: {str(e)}"}
+            return make_response(
+                f"Error: {str(e)}",
+                trace=trace + [{"type": "exception", "step": step + 1, "message": str(e)}],
+                request_id=request_id,
+            )
     
-    return {"response": last_content}
+    return make_response(last_content, trace=trace, request_id=request_id)
 
 
 

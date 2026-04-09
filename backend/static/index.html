@@ -25,11 +25,12 @@
 
         function App() {
             const [messages, setMessages] = useState([
-                { user: "", assistant: "Hello! I'm your Gemma 4 Mobile Agent. I'm ready to help with your phone, search the web, or access your files." }
+                { user: "", assistant: "Hello! I'm your Gemma 4 Mobile Agent. I'm ready to help with your phone, search the web, or access your files.", trace: [], mode: "system", requestId: "welcome" }
             ]);
             const [input, setInput] = useState("");
             const [loading, setLoading] = useState(false);
             const [status, setStatus] = useState({ actor_online: false, actor_model: "Checking..." });
+            const [showTrace, setShowTrace] = useState(true);
             const chatEndRef = useRef(null);
 
             useEffect(() => {
@@ -51,7 +52,7 @@
                 setInput("");
                 setLoading(true);
                 
-                setMessages(prev => [...prev, { user: userMessage, assistant: "Thinking..." }]);
+                setMessages(prev => [...prev, { user: userMessage, assistant: "Thinking...", trace: [], mode: "pending", requestId: `pending-${Date.now()}` }]);
 
                 try {
                     const history = messages.filter(m => m.user).map(m => ({ user: m.user, assistant: m.assistant }));
@@ -65,12 +66,17 @@
                     setMessages(prev => {
                         const updated = [...prev];
                         updated[updated.length - 1].assistant = data.response;
+                        updated[updated.length - 1].trace = data.trace || [];
+                        updated[updated.length - 1].mode = data.mode || "agentic";
+                        updated[updated.length - 1].requestId = data.request_id || updated[updated.length - 1].requestId;
                         return updated;
                     });
                 } catch (error) {
                     setMessages(prev => {
                         const updated = [...prev];
                         updated[updated.length - 1].assistant = "⚠️ Error connecting to the agent. Make sure the server is running.";
+                        updated[updated.length - 1].trace = [{ type: "exception", message: String(error) }];
+                        updated[updated.length - 1].mode = "error";
                         return updated;
                     });
                 } finally {
@@ -107,6 +113,16 @@
                         </div>
                     </header>
 
+                    <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-[11px] uppercase tracking-wider font-semibold text-slate-600">
+                        <span>{showTrace ? "Trace Visible" : "Trace Hidden"}</span>
+                        <button
+                            onClick={() => setShowTrace(prev => !prev)}
+                            className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-bold text-slate-700"
+                        >
+                            {showTrace ? "Hide Debug" : "Show Debug"}
+                        </button>
+                    </div>
+
                     <main className="chat-container p-4 flex-1 bg-white">
                         {messages.map((m, i) => (
                             <div key={i} className="animate-fade-in">
@@ -118,6 +134,19 @@
                                 <div className="message-bubble assistant-bubble shadow-sm text-sm whitespace-pre-wrap">
                                     {m.assistant}
                                 </div>
+                                {showTrace && m.trace && m.trace.length > 0 && (
+                                    <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                                        <div className="mb-2 flex items-center justify-between font-semibold uppercase tracking-wide text-slate-500">
+                                            <span>{m.mode || "agentic"} trace</span>
+                                            <span>{m.requestId || "local"}</span>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {m.trace.map((item, idx) => (
+                                                <pre key={idx} className="whitespace-pre-wrap rounded-xl bg-white p-2 border border-slate-200 overflow-x-auto">{JSON.stringify(item, null, 2)}</pre>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ))}
                         <div ref={chatEndRef}></div>

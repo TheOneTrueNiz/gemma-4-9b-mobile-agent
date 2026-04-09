@@ -2,6 +2,7 @@ import re
 import json
 import sys
 import os
+import time
 
 # Add tools to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -16,17 +17,17 @@ class FastPathRouter:
             (r"^(hi|hello|hey|greetings)(\s|$)", self.handle_greeting),
             
             # Time
-            (r"^(what time is it|current time|date and time)$", lambda m: {"response": f"The current time is {AVAILABLE_TOOLS['get_time']()}"}),
+            (r"^(what time is it|current time|date and time)$", self.handle_time),
             
             # Battery
-            (r"^(battery|power level|charge level|check battery)$", lambda m: {"response": f"Battery Status: {json.dumps(AVAILABLE_TOOLS['get_battery_status']())}"}),
+            (r"^(battery|power level|charge level|check battery)$", self.handle_battery),
 
             
             # Vibration
-            (r"^(vibrate|buzz)$", lambda m: {"response": AVAILABLE_TOOLS['vibrate']()}),
+            (r"^(vibrate|buzz)$", self.handle_vibrate),
             
             # Location
-            (r"^(where am i|get location|gps)$", lambda m: {"response": f"Your current location: {json.dumps(AVAILABLE_TOOLS['get_location']())}"}),
+            (r"^(where am i|get location|gps)$", self.handle_location),
             
             # Brightness
             (r"^(set|change) brightness to (\d+)$", self.handle_brightness),
@@ -35,19 +36,19 @@ class FastPathRouter:
             (r"^(list|show) files in (.*)$", self.handle_list_files),
 
             # Torch
-            (r"^torch (on|off)$", lambda m: {"response": AVAILABLE_TOOLS['torch'](m.group(1) == "on")}),
-            (r"^(flashlight|torch)$", lambda m: {"response": AVAILABLE_TOOLS['torch'](True)}),
+            (r"^torch (on|off)$", self.handle_torch_state),
+            (r"^(flashlight|torch)$", self.handle_torch_on),
 
 
             # TTS
-            (r"^(speak|say) (.*)$", lambda m: {"response": AVAILABLE_TOOLS['tts_speak'](m.group(2))}),
+            (r"^(speak|say) (.*)$", self.handle_tts),
 
             # Clipboard
-            (r"^(get|show) clipboard$", lambda m: {"response": f"Clipboard: {AVAILABLE_TOOLS['get_clipboard']()}"}),
-            (r"^set clipboard to (.*)$", lambda m: {"response": AVAILABLE_TOOLS['set_clipboard'](m.group(1))}),
+            (r"^(get|show) clipboard$", self.handle_get_clipboard),
+            (r"^set clipboard to (.*)$", self.handle_set_clipboard),
 
             # Open URL
-            (r"^open (https?://\S+)$", lambda m: {"response": AVAILABLE_TOOLS['open_url'](m.group(1))}),
+            (r"^open (https?://\S+)$", self.handle_open_url),
             (r"^open (google|bing|duckduckgo)$", self.handle_open_search),
 
             # Search
@@ -62,10 +63,44 @@ class FastPathRouter:
             "bing": "https://www.bing.com",
             "duckduckgo": "https://www.duckduckgo.com"
         }
-        return self.execute_tool("open_url", {"url": urls[site]}, f"open {site}")
+        return self.execute_tool("open_url", {"url": urls[site]}, f"open {site}", route="open_search")
 
     def handle_greeting(self, match):
-        return {"response": "Hello! I am your Gemma 4 Mobile Agent. I am running locally and ready to help."}
+        return {
+            "response": "Hello! I am your Gemma 4 Mobile Agent. I am running locally and ready to help.",
+            "trace": [{"type": "fast_path", "route": "greeting", "status": "ok"}],
+        }
+
+    def handle_time(self, match):
+        return self.execute_tool("get_time", {}, match.string, formatter=lambda result: f"The current time is {result}", route="time")
+
+    def handle_battery(self, match):
+        return self.execute_tool("get_battery_status", {}, match.string, formatter=lambda result: f"Battery Status: {json.dumps(result)}", route="battery")
+
+    def handle_vibrate(self, match):
+        return self.execute_tool("vibrate", {}, match.string, route="vibrate")
+
+    def handle_location(self, match):
+        return self.execute_tool("get_location", {}, match.string, formatter=lambda result: f"Your current location: {json.dumps(result)}", route="location")
+
+    def handle_torch_state(self, match):
+        enabled = match.group(1) == "on"
+        return self.execute_tool("torch", {"enabled": enabled}, match.string, route="torch_state")
+
+    def handle_torch_on(self, match):
+        return self.execute_tool("torch", {"enabled": True}, match.string, route="torch_on")
+
+    def handle_tts(self, match):
+        return self.execute_tool("tts_speak", {"text": match.group(2)}, match.string, route="tts")
+
+    def handle_get_clipboard(self, match):
+        return self.execute_tool("get_clipboard", {}, match.string, formatter=lambda result: f"Clipboard: {result}", route="get_clipboard")
+
+    def handle_set_clipboard(self, match):
+        return self.execute_tool("set_clipboard", {"text": match.group(1)}, match.string, route="set_clipboard")
+
+    def handle_open_url(self, match):
+        return self.execute_tool("open_url", {"url": match.group(1)}, match.string, route="open_url")
 
     def handle_web_search(self, match):
         query = match.group(3).strip().strip("'\"")
@@ -82,7 +117,7 @@ class FastPathRouter:
 
     def handle_brightness(self, match):
         level = int(match.group(2))
-        return self.execute_tool("set_brightness", {"level": level}, match.string)
+        return self.execute_tool("set_brightness", {"level": level}, match.string, route="brightness")
 
     def handle_list_files(self, match):
         path = match.group(2).strip()
@@ -92,16 +127,44 @@ class FastPathRouter:
         elif "dcim" in path.lower() or "photos" in path.lower():
             path = os.path.expanduser("~/storage/dcim")
 
-        return self.execute_tool("list_files", {"directory": path}, match.string, formatter=lambda result: f"Files in {path}:\n" + "\n".join(result[:10]))
+        return self.execute_tool(
+            "list_files",
+            {"directory": path},
+            match.string,
+            formatter=lambda result: f"Files in {path}:\n" + "\n".join(result[:10]),
+            route="list_files",
+        )
 
-    def execute_tool(self, tool_name, args, user_message, formatter=None):
+    def execute_tool(self, tool_name, args, user_message, formatter=None, route=None):
+        started_at = time.time()
         allowed, normalized_args, reason = validate_tool_call(AVAILABLE_TOOLS, tool_name, args, user_message)
         if not allowed:
-            return {"response": f"Blocked tool call: {reason}"}
+            return {
+                "response": f"Blocked tool call: {reason}",
+                "trace": [{
+                    "type": "fast_path_tool",
+                    "route": route or tool_name,
+                    "tool": tool_name,
+                    "args": normalized_args,
+                    "status": "blocked",
+                    "reason": reason,
+                    "duration_ms": int((time.time() - started_at) * 1000),
+                }],
+            }
         result = AVAILABLE_TOOLS[tool_name](**normalized_args)
-        if formatter:
-            return {"response": formatter(result)}
-        return {"response": result}
+        response = formatter(result) if formatter else result
+        return {
+            "response": response,
+            "trace": [{
+                "type": "fast_path_tool",
+                "route": route or tool_name,
+                "tool": tool_name,
+                "args": normalized_args,
+                "status": "ok",
+                "result_preview": str(result)[:200],
+                "duration_ms": int((time.time() - started_at) * 1000),
+            }],
+        }
 
     def route(self, message):
         """Checks if a message matches any fast-path patterns."""
