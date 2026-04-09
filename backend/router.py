@@ -110,9 +110,27 @@ class FastPathRouter:
             if result.get("summary"):
                 lines.append(result["summary"])
             for item in result["results"][:3]:
-                lines.append(f"- {item['title']}: {item['url']}")
-            return {"response": "\n".join(lines)}
-        return {"response": json.dumps(result)}
+                host = item.get("host") or "source"
+                lines.append(f"- {item['title']} [{host}]: {item['url']}")
+            return {
+                "response": "\n".join(lines),
+                "trace": [{
+                    "type": "fast_path_search",
+                    "route": "web_search",
+                    "query": query,
+                    "status": "ok",
+                    "result_count": len(result["results"]),
+                }],
+            }
+        return {
+            "response": json.dumps(result),
+            "trace": [{
+                "type": "fast_path_search",
+                "route": "web_search",
+                "query": query,
+                "status": "empty",
+            }],
+        }
 
 
     def handle_brightness(self, match):

@@ -103,6 +103,13 @@ def normalize_search_result_url(url):
             return urllib.parse.unquote(redirected[0])
     return url
 
+def extract_host_label(url):
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host
+
 def extract_duckduckgo_html_results(html):
     results = []
     pattern = re.compile(
@@ -115,6 +122,7 @@ def extract_duckduckgo_html_results(html):
         results.append({
             "title": strip_html(match.group("title")),
             "url": url,
+            "host": extract_host_label(url),
             "snippet": strip_html(match.group("snippet")),
         })
     return results

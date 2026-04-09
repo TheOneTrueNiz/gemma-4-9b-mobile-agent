@@ -31,6 +31,7 @@ class SearchAndRouterTests(unittest.TestCase):
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["title"], "Example Result One")
         self.assertEqual(results[1]["url"], "https://example.com/two")
+        self.assertEqual(results[0]["host"], "example.com")
 
     @patch("tools.phone_tools.fetch_html_search_results")
     @patch("tools.phone_tools.fetch_instant_answer")
@@ -55,15 +56,16 @@ class SearchAndRouterTests(unittest.TestCase):
             {"web_search": lambda query: {
                 "summary": "Summary text",
                 "results": [
-                    {"title": "Result A", "url": "https://example.com/a", "snippet": "A"},
-                    {"title": "Result B", "url": "https://example.com/b", "snippet": "B"},
+                    {"title": "Result A", "url": "https://example.com/a", "host": "example.com", "snippet": "A"},
+                    {"title": "Result B", "url": "https://example.com/b", "host": "example.com", "snippet": "B"},
                 ],
             }},
             clear=False,
         ):
             response = router.route("search the web for local llm tools")
         self.assertIn("Search results for 'local llm tools':", response["response"])
-        self.assertIn("https://example.com/a", response["response"])
+        self.assertIn("[example.com]", response["response"])
+        self.assertIn("fast_path_search", str(response["trace"]))
 
 
 if __name__ == "__main__":
