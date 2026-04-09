@@ -260,6 +260,16 @@ def verify_with_critic(proposal):
         return True # Default to pass
 
 
+def append_tool_feedback(prompt, assistant_content, tool_result, *, blocked=False, rejected=False):
+    prompt += f"{assistant_content}\nTool Result: {json.dumps(tool_result)}\n"
+    if blocked:
+        prompt += "System: The requested tool action was blocked by policy. Choose a safer alternative tool or answer directly without the blocked action.\n"
+    elif rejected:
+        prompt += "System: The critic rejected that tool call. Choose a different safe tool or answer directly.\n"
+    prompt += "Assistant:"
+    return prompt
+
+
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
@@ -348,7 +358,7 @@ async def chat(request: ChatRequest):
                             "status": "blocked",
                             "reason": validation_error,
                         })
-                        current_prompt += f"{content}\nTool Result: {json.dumps(result)}\nAssistant:"
+                        current_prompt = append_tool_feedback(current_prompt, content, result, blocked=True)
                         last_content = result
                         continue
                     
@@ -369,7 +379,7 @@ async def chat(request: ChatRequest):
                         
                         print(f"✅ Tool Result: {str(result)[:50]}...")
                         # Feed result back and loop
-                        current_prompt += f"{content}\nTool Result: {json.dumps(result)}\nAssistant:"
+                        current_prompt = append_tool_feedback(current_prompt, content, result)
                         continue 
                 elif tool_call:
                     trace.append({
@@ -378,6 +388,10 @@ async def chat(request: ChatRequest):
                         "status": "rejected",
                         "proposal": tool_call,
                     })
+                    rejection = "Critic rejected tool call."
+                    current_prompt = append_tool_feedback(current_prompt, content, rejection, rejected=True)
+                    last_content = rejection
+                    continue
             
             # If no tool call or finished, return final content
             print("📤 Returning final response.")
