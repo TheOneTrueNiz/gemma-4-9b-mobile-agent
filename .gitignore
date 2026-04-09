@@ -13,6 +13,8 @@ models/*.gguf
 # Local State
 models/*.json
 !models/test_memory.json
+models/*.db
+backend_server.log
 
 # Binaries
 backend/llama-server

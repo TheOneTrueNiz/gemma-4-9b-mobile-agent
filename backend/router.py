@@ -15,37 +15,43 @@ class FastPathRouter:
             (r"^(hi|hello|hey|greetings)(\s|$)", self.handle_greeting),
             
             # Time
-            (r"(what time|current time|date and time)", lambda m: {"response": f"The current time is {AVAILABLE_TOOLS['get_time']()}"}),
+            (r"^(what time is it|current time|date and time)$", lambda m: {"response": f"The current time is {AVAILABLE_TOOLS['get_time']()}"}),
             
             # Battery
-            (r"(battery|power level|charge)", lambda m: {"response": f"Battery Status: {json.dumps(AVAILABLE_TOOLS['get_battery_status']())}"}),
+            (r"^(battery|power level|charge level|check battery)$", lambda m: {"response": f"Battery Status: {json.dumps(AVAILABLE_TOOLS['get_battery_status']())}"}),
+
             
             # Vibration
-            (r"(vibrate|buzz)", lambda m: {"response": AVAILABLE_TOOLS['vibrate']()}),
+            (r"^(vibrate|buzz)$", lambda m: {"response": AVAILABLE_TOOLS['vibrate']()}),
             
             # Location
-            (r"(where am i|location|gps)", lambda m: {"response": f"Your current location: {json.dumps(AVAILABLE_TOOLS['get_location']())}"}),
+            (r"^(where am i|get location|gps)$", lambda m: {"response": f"Your current location: {json.dumps(AVAILABLE_TOOLS['get_location']())}"}),
             
-            # Brightness (with basic arg extraction)
-            (r"(set|change) brightness to (\d+)", self.handle_brightness),
+            # Brightness
+            (r"^(set|change) brightness to (\d+)$", self.handle_brightness),
             
             # Listing files
-            (r"(list|show) files in (.*)", self.handle_list_files),
+            (r"^(list|show) files in (.*)$", self.handle_list_files),
 
             # Torch
-            (r"torch (on|off)", lambda m: {"response": AVAILABLE_TOOLS['torch'](m.group(1) == "on")}),
-            (r"(flashlight|torch)", lambda m: {"response": AVAILABLE_TOOLS['torch'](True)}),
+            (r"^torch (on|off)$", lambda m: {"response": AVAILABLE_TOOLS['torch'](m.group(1) == "on")}),
+            (r"^(flashlight|torch)$", lambda m: {"response": AVAILABLE_TOOLS['torch'](True)}),
+
 
             # TTS
-            (r"(speak|say) (.*)", lambda m: {"response": AVAILABLE_TOOLS['tts_speak'](m.group(2))}),
+            (r"^(speak|say) (.*)$", lambda m: {"response": AVAILABLE_TOOLS['tts_speak'](m.group(2))}),
 
             # Clipboard
-            (r"(get|show) clipboard", lambda m: {"response": f"Clipboard: {AVAILABLE_TOOLS['get_clipboard']()}"}),
-            (r"set clipboard to (.*)", lambda m: {"response": AVAILABLE_TOOLS['set_clipboard'](m.group(1))}),
+            (r"^(get|show) clipboard$", lambda m: {"response": f"Clipboard: {AVAILABLE_TOOLS['get_clipboard']()}"}),
+            (r"^set clipboard to (.*)$", lambda m: {"response": AVAILABLE_TOOLS['set_clipboard'](m.group(1))}),
 
             # Open URL
-            (r"open (https?://\S+)", lambda m: {"response": AVAILABLE_TOOLS['open_url'](m.group(1))}),
-            (r"open (google|bing|duckduckgo)", self.handle_open_search),
+            (r"^open (https?://\S+)$", lambda m: {"response": AVAILABLE_TOOLS['open_url'](m.group(1))}),
+            (r"^open (google|bing|duckduckgo)$", self.handle_open_search),
+
+            # Search
+            (r"^(search|look up|find) (the web for )?(.*)$", self.handle_web_search),
+
         ]
 
     def handle_open_search(self, match):
@@ -59,6 +65,10 @@ class FastPathRouter:
 
     def handle_greeting(self, match):
         return {"response": "Hello! I am your Gemma 4 Mobile Agent. I am running locally and ready to help."}
+
+    def handle_web_search(self, match):
+        query = match.group(3).strip().strip("'\"")
+        return {"response": json.dumps(AVAILABLE_TOOLS["web_search"](query))}
 
 
     def handle_brightness(self, match):
@@ -77,12 +87,19 @@ class FastPathRouter:
 
     def route(self, message):
         """Checks if a message matches any fast-path patterns."""
+        clean_msg = message.lower().strip()
         for pattern, handler in self.patterns:
-            match = re.search(pattern, message.lower())
+            # Use match for greetings to ensure they don't hijack complex sentences
+            if "hi|" in pattern or "hello|" in pattern:
+                match = re.match(pattern, clean_msg)
+            else:
+                match = re.search(pattern, clean_msg)
+                
             if match:
                 print(f"⚡ Fast-Path match found for: '{message}'")
                 return handler(match)
         return None
+
 
 # Singleton instance
 router = FastPathRouter()

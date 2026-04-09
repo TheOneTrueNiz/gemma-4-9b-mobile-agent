@@ -12,10 +12,17 @@ def run_termux_command(command):
     except subprocess.CalledProcessError as e:
         return f"Error: {e.stderr}"
 
+
+def parse_json_output(output):
+    try:
+        return json.loads(output)
+    except Exception:
+        return {"error": output}
+
 def get_battery_status():
     """Returns the battery status of the device."""
     output = run_termux_command(["termux-battery-status"])
-    return json.loads(output)
+    return parse_json_output(output)
 
 def vibrate(duration_ms=200):
     """Vibrates the device for a specified duration."""
@@ -25,7 +32,7 @@ def vibrate(duration_ms=200):
 def get_location():
     """Returns the current GPS location."""
     output = run_termux_command(["termux-location"])
-    return json.loads(output)
+    return parse_json_output(output)
 
 def send_sms(number, message):
     """Sends an SMS message to a specific number."""
@@ -35,7 +42,7 @@ def send_sms(number, message):
 def list_contacts():
     """Lists phone contacts."""
     output = run_termux_command(["termux-contact-list"])
-    return json.loads(output)
+    return parse_json_output(output)
 
 def set_brightness(level):
     """Sets the screen brightness (0-255)."""
@@ -117,7 +124,7 @@ def torch(enabled=True):
 def get_wifi_info():
     """Returns information about the current WiFi connection."""
     output = run_termux_command(["termux-wifi-connectioninfo"])
-    return json.loads(output)
+    return parse_json_output(output)
 
 # Dictionary of available tools for the agent
 AVAILABLE_TOOLS = {
@@ -140,4 +147,3 @@ AVAILABLE_TOOLS = {
     "torch": torch,
     "get_wifi_info": get_wifi_info
 }
-

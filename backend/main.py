@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -10,18 +12,18 @@ import time
 import requests
 import re
 
-# Add tools directory to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+# Allow importing the sibling editable MemSpire repo even when another caller
+# prepends the Termux home directory and creates a namespace-package collision.
+MEMSPIRE_REPO = os.path.abspath(os.path.join(PROJECT_ROOT, "..", "memspire"))
+if os.path.exists(os.path.join(MEMSPIRE_REPO, "memspire", "__init__.py")) and MEMSPIRE_REPO not in sys.path:
+    sys.path.insert(0, MEMSPIRE_REPO)
+
 from tools.phone_tools import AVAILABLE_TOOLS
 from backend.router import router
-
-app = FastAPI()
-app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
-
-
-@app.get("/")
-async def read_index():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "static/index.html"))
 
 # --- SMOLCLAW PATTERN: ARGUMENT ALIASING & REPAIR ---
 ARG_ALIASES = {
@@ -95,50 +97,97 @@ MODELS = {
     "actor": {
         "path": os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/gemma-4-e4b-it-q4_k_m.gguf")),
         "port": "8888",
-        "threads": "6" # Increased for Snapdragon 8 Gen 3 (8 cores)
-    },
-    "critic": {
-        "path": os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/gemma-4-e2b-it-q4_k_m.gguf")),
-        "port": "8889",
-        "threads": "2" 
+        "threads": "4" 
     }
 }
 SERVER_BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), "./llama-server"))
+actor_process = None
+actor_online = False
 
 def start_engine(name, config):
     print(f"--- Launching {name.upper()} Engine ---")
     cmd = [
         SERVER_BIN,
         "-m", config["path"],
-        "-c", "2048", # Faster mobile response
+        "-c", "4096",
         "--port", config["port"],
         "-t", config["threads"],
         "-b", "512",
-        "--flash-attn", "on",
-        "--cache-type-k", "q4_0", # Turbo Quant: KV Cache compression
-        "--cache-type-v", "q4_0",
-        "--log-disable"
+        "--log-disable",
+        "--cache-type-k", "q4_0",
+        "--cache-type-v", "q4_0"
     ]
-
-
     process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     # Ready check
-    for i in range(120): # Increased timeout for heavy mobile loading
+    for i in range(120):
         try:
             res = requests.get(f"http://localhost:{config['port']}/health", timeout=1)
             if res.status_code == 200:
-                print(f"✅ {name.upper()} is ONLINE (Port {config['port']})")
+                print(f"✅ {name.upper()} is ONLINE")
                 return process
         except:
-            if i % 10 == 0: print(f"  {name.upper()} is loading... ({i}s)")
             time.sleep(1)
-
     return process
 
-# Start both engines
-actor_process = start_engine("actor", MODELS["actor"])
-critic_process = start_engine("critic", MODELS["critic"])
+
+def ensure_actor_engine():
+    global actor_process, actor_online
+    if actor_online:
+        return True
+
+    if not os.path.exists(SERVER_BIN):
+        print(f"⚠️ llama-server binary not found at {SERVER_BIN}")
+        return False
+
+    if not os.path.exists(MODELS["actor"]["path"]):
+        print(f"⚠️ actor model not found at {MODELS['actor']['path']}")
+        return False
+
+    actor_process = start_engine("actor", MODELS["actor"])
+    try:
+        res = requests.get(f"http://localhost:{MODELS['actor']['port']}/health", timeout=2)
+        actor_online = res.status_code == 200
+    except Exception:
+        actor_online = False
+    return actor_online
+
+
+def stop_actor_engine():
+    global actor_process, actor_online
+    if actor_process and actor_process.poll() is None:
+        actor_process.terminate()
+        try:
+            actor_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            actor_process.kill()
+    actor_process = None
+    actor_online = False
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    ensure_actor_engine()
+    yield
+    stop_actor_engine()
+
+
+app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+
+
+@app.get("/")
+async def read_index():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static/index.html"))
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "actor_online": ensure_actor_engine(),
+        "actor_model": os.path.basename(MODELS["actor"]["path"]),
+    }
 
 class ChatRequest(BaseModel):
     message: str
@@ -160,9 +209,11 @@ def format_actor_prompt(message, history):
 
     prompt = f"System: You are the ACTOR, a powerful AI assistant running locally on a phone. Your goal is to help the user using available tools. Output JSON for tool calls.\n"
     prompt += "You have a hierarchical memory system called MemSpire (Wing > Floor > Cell).\n"
-    prompt += "When remembering things, try to categorize them into logical Wings (Identity, World, Projects) and Floors (Family, Hobbies, TaskX).\n"
+    prompt += "IMPORTANT: Do NOT output code blocks (```). Do NOT explain your plan. ONLY output raw JSON when you need a tool.\n"
     prompt += "JSON FORMAT: {\"tool\": \"tool_name\", \"args\": {\"arg_name\": \"value\"}}\n\n"
+    prompt += "EXAMPLE MULTI-STEP:\nUser: What's the weather like here?\nAssistant: {\"tool\": \"get_location\", \"args\": {}}\nTool Result: {\"latitude\": 40.7, \"longitude\": -74.0}\nAssistant: {\"tool\": \"web_search\", \"args\": {\"query\": \"weather in New York\"}}\n\n"
     prompt += f"AVAILABLE TOOLS:\n{tools_list}\n\n"
+
     if mem_str:
         prompt += f"RELEVANT MEMORIES (MemSpire):\n{mem_str}\n\n"
     for h in history:
@@ -172,8 +223,10 @@ def format_actor_prompt(message, history):
 
 
 def verify_with_critic(proposal):
-    """SmolClaw pattern: Proposer-Critic Split"""
+    """SmolClaw pattern: Proposer-Critic Split (Running on same engine)"""
     print(f"🔍 Critic reviewing proposal: {proposal[:50]}...")
+    if not ensure_actor_engine():
+        return False
     
     critic_prompt = "System: You are the CRITIC. Your job is to approve or reject tool calls. Reject only if harmful or logically broken.\n\n"
     critic_prompt += "EXAMPLES:\n"
@@ -183,7 +236,7 @@ def verify_with_critic(proposal):
     critic_prompt += f"Proposal: {proposal}\n\nDecision:"
     
     try:
-        res = requests.post("http://localhost:8889/completion", json={
+        res = requests.post("http://localhost:8888/completion", json={
             "prompt": critic_prompt, "n_predict": 16, "stop": ["\n"], "stream": False
         }, timeout=30)
 
@@ -195,9 +248,12 @@ def verify_with_critic(proposal):
         return True # Default to pass
 
 
+
 @app.post("/chat")
 async def chat(request: ChatRequest):
     print(f"📥 Incoming message: {request.message}")
+    if not ensure_actor_engine():
+        return {"response": "Error: actor engine is offline. Check the model path and llama-server binary."}
     
     # 1. Fast-Path
     fast_response = router.route(request.message)
@@ -205,32 +261,32 @@ async def chat(request: ChatRequest):
         print(f"⚡ Fast-Path match: {fast_response['response'][:50]}...")
         return fast_response
 
-    # 2. Actor Proposes
-    print("🤖 ACTOR is thinking...")
-    prompt = format_actor_prompt(request.message, request.history)
-    try:
-        res = requests.post("http://localhost:8888/completion", json={
-            "prompt": prompt, "n_predict": 512, "stop": ["User:", "\n\n"], "stream": False
-        }, timeout=120)
-        
-        if res.status_code != 200:
-            print(f"❌ ACTOR error: {res.status_code} - {res.text}")
-            return {"response": f"Error: Actor engine returned {res.status_code}"}
+    # 2. Agentic Loop (Max 3 steps)
+    current_prompt = format_actor_prompt(request.message, request.history)
+    last_content = ""
+    
+    for step in range(3):
+        print(f"🤖 ACTOR step {step+1} is thinking...")
+        try:
+            res = requests.post("http://localhost:8888/completion", json={
+                "prompt": current_prompt, "n_predict": 512, 
+                "stop": ["User:", "Assistant:", "<|turn|>", "<turn|>", "<eos>"], 
+                "stream": False
+            }, timeout=120)
             
-        content = res.json()["content"].strip()
-        print(f"🧠 ACTOR proposal: {content[:100]}...")
-        
-        # 3. Repair & Validate Tool Usage
-        if "{" in content and "}" in content:
-            start, end = content.find("{"), content.rfind("}") + 1
-            tool_json_raw = content[start:end]
+            if res.status_code != 200:
+                return {"response": f"Error: Actor engine returned {res.status_code}"}
+                
+            content = res.json()["content"].strip()
+            last_content = content
             
-            # SmolClaw Repair Layer
-            tool_call = repair_and_alias_json(tool_json_raw)
-            
-            if tool_call:
-                print(f"⚙️ Validated tool call: {tool_call['tool']}")
-                if verify_with_critic(json.dumps(tool_call)):
+            # Check for tool usage
+            if "{" in content and "}" in content:
+                start, end = content.find("{"), content.rfind("}") + 1
+                tool_json_raw = content[start:end]
+                tool_call = repair_and_alias_json(tool_json_raw)
+                
+                if tool_call and verify_with_critic(json.dumps(tool_call)):
                     tool_name = tool_call.get("tool")
                     args = tool_call.get("args", {})
                     
@@ -239,29 +295,23 @@ async def chat(request: ChatRequest):
                         try:
                             result = AVAILABLE_TOOLS[tool_name](**args)
                         except Exception as te:
-                            result = f"Error executing tool: {str(te)}"
+                            result = f"Error: {str(te)}"
                         
-                        print(f"✅ Tool Result: {str(result)[:100]}...")
-                        
-                        # 4. Final Synthesis
-                        print("✍️ Synthesizing final response...")
-                        final_res = requests.post("http://localhost:8888/completion", json={
-                            "prompt": prompt + content + f"\nTool Result: {json.dumps(result)}\nAssistant:",
-                            "n_predict": 256, "stop": ["User:", "\n\n"], "stream": False
-                        }, timeout=120)
-                        return {"response": final_res.json()["content"].strip(), "tool_used": tool_name}
-                else:
-                    print("⚖️ CRITIC REJECTED the tool call.")
-                    return {"response": "My tool request was rejected by my critic. How else can I help?"}
-            else:
-                print("🛠️ JSON Repair failed to produce a valid tool call.")
+                        print(f"✅ Tool Result: {str(result)[:50]}...")
+                        # Feed result back and loop
+                        current_prompt += f"{content}\nTool Result: {json.dumps(result)}\nAssistant:"
+                        continue 
+            
+            # If no tool call or finished, return final content
+            print("📤 Returning final response.")
+            return {"response": content}
                 
-    except Exception as e:
-        print(f"⚠️ Chat Exception: {str(e)}")
-        return {"response": f"Error: {str(e)}"}
+        except Exception as e:
+            print(f"⚠️ Chat Exception: {str(e)}")
+            return {"response": f"Error: {str(e)}"}
     
-    print("📤 Returning plain text response.")
-    return {"response": content}
+    return {"response": last_content}
+
 
 
 if __name__ == "__main__":

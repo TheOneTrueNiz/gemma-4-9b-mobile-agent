@@ -29,11 +29,19 @@
             ]);
             const [input, setInput] = useState("");
             const [loading, setLoading] = useState(false);
+            const [status, setStatus] = useState({ actor_online: false, actor_model: "Checking..." });
             const chatEndRef = useRef(null);
 
             useEffect(() => {
                 chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }, [messages]);
+
+            useEffect(() => {
+                fetch("/health")
+                    .then((res) => res.json())
+                    .then((data) => setStatus(data))
+                    .catch(() => setStatus({ actor_online: false, actor_model: "Offline" }));
+            }, []);
 
             const sendMessage = async (text) => {
                 const msg = text || input;
@@ -71,14 +79,14 @@
             };
 
             const quickActions = [
-                { icon: "🔋", label: "Battery", cmd: "Check battery status" },
-                { icon: "📍", label: "Location", cmd: "Get current GPS location" },
-                { icon: "🔦", label: "Torch", cmd: "Flashlight" },
-                { icon: "🔊", label: "Speak", cmd: "Say 'Hello, I am Gemma!'" },
-                { icon: "📋", label: "Clipboard", cmd: "Get clipboard content" },
-                { icon: "🔎", label: "Search", cmd: "Search the web for 'today news'" },
+                { icon: "🔋", label: "Battery", cmd: "battery" },
+                { icon: "📍", label: "Location", cmd: "get location" },
+                { icon: "🔦", label: "Torch", cmd: "flashlight" },
+                { icon: "🔊", label: "Speak", cmd: "say Hello, I am Gemma!" },
+                { icon: "📋", label: "Clipboard", cmd: "get clipboard" },
+                { icon: "🔎", label: "Search", cmd: "Search the web for today news" },
                 { icon: "📂", label: "Files", cmd: "List files in my storage downloads" },
-                { icon: "📳", label: "Vibrate", cmd: "Vibrate the phone" }
+                { icon: "📳", label: "Vibrate", cmd: "vibrate" }
             ];
 
 
@@ -89,7 +97,9 @@
                             <h1 className="text-xl font-extrabold tracking-tight">GEMMA 4 MOBILE</h1>
                             <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="h-2 w-2 bg-green-400 rounded-full"></span>
-                                <p className="text-[10px] uppercase font-bold opacity-80 tracking-widest text-green-100">9B Engine Online</p>
+                                <p className="text-[10px] uppercase font-bold opacity-80 tracking-widest text-green-100">
+                                    {status.actor_online ? `${status.actor_model} Online` : "Engine Offline"}
+                                </p>
                             </div>
                         </div>
                         <div className="p-2 bg-blue-800 rounded-lg">
@@ -105,7 +115,7 @@
                                         {m.user}
                                     </div>
                                 )}
-                                <div className="message-bubble assistant-bubble shadow-sm text-sm">
+                                <div className="message-bubble assistant-bubble shadow-sm text-sm whitespace-pre-wrap">
                                     {m.assistant}
                                 </div>
                             </div>
@@ -131,7 +141,7 @@
                                 type="text"
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+                                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                                 placeholder="Command your phone..."
                                 className="flex-1 bg-transparent px-4 py-2 text-sm focus:outline-none"
                                 disabled={loading}

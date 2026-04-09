@@ -1,26 +1,22 @@
 import sys
 import os
-import json
 
-# Add project directories to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from tools.phone_tools import AVAILABLE_TOOLS
-from backend.main import MemoryManager
+from backend.main import health, recall_tool, remember_tool
 
 def test_memory():
-    print("--- Testing Memory Manager ---")
-    test_file = "models/test_memory.json"
-    mem = MemoryManager(test_file)
-    res = mem.add("The secret password is 'GemmaIsGreat'")
-    print(f"Add memory result: {res}")
-    
-    recalled = mem.recall("secret password")
+    print("--- Testing MemSpire Integration ---")
+    fact = "Test memory: Gemma mobile agent system check"
+    res = remember_tool(fact, wing="Testing", floor="Smoke")
+    print(f"Remember result: {res}")
+
+    recalled = recall_tool("Gemma mobile agent system check")
     print(f"Recall result: {recalled}")
-    
-    if os.path.exists(test_file):
-        os.remove(test_file)
-        print("Test memory file cleaned up.")
-    return len(recalled) > 0
+    return fact in recalled
 
 def test_search():
     print("\n--- Testing Web Search ---")
@@ -34,13 +30,22 @@ def test_file_system():
     print(f"Files found: {len(files)}")
     return len(files) > 0
 
+async def test_backend_health():
+    print("\n--- Testing Backend Health Payload ---")
+    payload = await health()
+    print(f"Health payload: {payload}")
+    return payload.get("status") == "ok" and "actor_online" in payload
+
 if __name__ == "__main__":
+    import asyncio
     m = test_memory()
     s = test_search()
     f = test_file_system()
+    h = asyncio.run(test_backend_health())
     
     print("\n" + "="*20)
     print(f"Memory: {'PASSED' if m else 'FAILED'}")
     print(f"Search: {'PASSED' if s else 'FAILED'}")
     print(f"Files:  {'PASSED' if f else 'FAILED'}")
+    print(f"Health: {'PASSED' if h else 'FAILED'}")
     print("="*20)
