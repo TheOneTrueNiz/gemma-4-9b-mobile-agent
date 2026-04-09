@@ -241,6 +241,10 @@ def summarize_trace(trace):
         item_type = item.get("type", "unknown")
         if item_type == "request":
             lines.append(f"request: {item.get('message', '')}")
+        elif item_type == "state_transition":
+            lines.append(
+                f"state: {item.get('from_state')} -> {item.get('to_state')} reason={item.get('reason', '')}"
+            )
         elif item_type in {"fast_path_tool", "tool_execution"}:
             lines.append(
                 f"{item_type}: {item.get('tool')} status={item.get('status')} duration_ms={item.get('duration_ms', 'n/a')}"
@@ -356,6 +360,19 @@ def tool_call_signature(tool_name, args):
     return tool_name, tuple(normalized_items)
 
 
+def trace_state_transition(trace, from_state, to_state, reason, *, step=None):
+    entry = {
+        "type": "state_transition",
+        "from_state": from_state,
+        "to_state": to_state,
+        "reason": reason,
+    }
+    if step is not None:
+        entry["step"] = step
+    trace.append(entry)
+    return to_state
+
+
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
@@ -390,8 +407,11 @@ async def chat(request: ChatRequest):
     current_prompt = format_actor_prompt(request.message, request.history)
     last_content = ""
     seen_tool_calls = set()
+    state = "INIT"
+    trace_state_transition(trace, "REQUEST_RECEIVED", state, "agentic_path_selected")
     
     for step in range(3):
+        state = trace_state_transition(trace, state, "ACTOR_THINK", "request_completion", step=step + 1)
         print(f"🤖 ACTOR step {step+1} is thinking...")
         try:
             res = requests.post("http://localhost:8888/completion", json={
@@ -401,6 +421,7 @@ async def chat(request: ChatRequest):
             }, timeout=120)
             
             if res.status_code != 200:
+                trace_state_transition(trace, state, "TERMINAL_ERROR", "actor_http_error", step=step + 1)
                 return make_response(
                     f"Error: Actor engine returned {res.status_code}",
                     trace=trace + [{"type": "actor", "step": step + 1, "status": "http_error", "status_code": res.status_code}],
@@ -416,9 +437,11 @@ async def chat(request: ChatRequest):
                 "status": "ok",
                 "content_preview": content[:240],
             })
+            state = trace_state_transition(trace, state, "ACTOR_RESPONSE", "completion_received", step=step + 1)
             
             # Check for tool usage
             if "{" in content and "}" in content:
+                state = trace_state_transition(trace, state, "TOOL_PARSE", "json_candidate_detected", step=step + 1)
                 start, end = content.find("{"), content.rfind("}") + 1
                 tool_json_raw = content[start:end]
                 tool_call = repair_and_alias_json(tool_json_raw)
@@ -434,16 +457,19 @@ async def chat(request: ChatRequest):
                         "step": step + 1,
                         "status": "malformed",
                     })
+                    state = trace_state_transition(trace, state, "ACTOR_THINK", "json_repair_feedback", step=step + 1)
                     current_prompt = append_json_repair_feedback(current_prompt, content)
                     last_content = content
                     continue
                 
+                state = trace_state_transition(trace, state, "CRITIC_REVIEW", "tool_call_parsed", step=step + 1)
                 if verify_with_critic(json.dumps(tool_call)):
                     trace.append({
                         "type": "critic",
                         "step": step + 1,
                         "status": "approved",
                     })
+                    state = trace_state_transition(trace, state, "TOOL_VALIDATE", "critic_approved", step=step + 1)
                     tool_name = tool_call.get("tool")
                     args = tool_call.get("args", {})
                     is_valid, args, validation_error = validate_tool_call(AVAILABLE_TOOLS, tool_name, args, request.message)
@@ -458,6 +484,7 @@ async def chat(request: ChatRequest):
                             "status": "blocked",
                             "reason": validation_error,
                         })
+                        state = trace_state_transition(trace, state, "ACTOR_THINK", "tool_blocked", step=step + 1)
                         current_prompt = append_tool_feedback(current_prompt, content, result, blocked=True)
                         last_content = result
                         continue
@@ -474,11 +501,13 @@ async def chat(request: ChatRequest):
                             "status": "blocked_repeat",
                             "reason": "duplicate_tool_call",
                         })
+                        state = trace_state_transition(trace, state, "ACTOR_THINK", "duplicate_tool_call", step=step + 1)
                         current_prompt = append_tool_feedback(current_prompt, content, result, blocked=True)
                         last_content = result
                         continue
                     
                     if tool_name in AVAILABLE_TOOLS:
+                        state = trace_state_transition(trace, state, "TOOL_EXECUTE", "validated_tool_call", step=step + 1)
                         print(f"🚀 Executing tool: {tool_name}")
                         seen_tool_calls.add(signature)
                         try:
@@ -496,8 +525,9 @@ async def chat(request: ChatRequest):
                         
                         print(f"✅ Tool Result: {str(result)[:50]}...")
                         # Feed result back and loop
+                        state = trace_state_transition(trace, state, "ACTOR_THINK", "tool_result_available", step=step + 1)
                         current_prompt = append_tool_feedback(current_prompt, content, result)
-                        continue 
+                        continue
                 trace.append({
                     "type": "critic",
                     "step": step + 1,
@@ -505,16 +535,19 @@ async def chat(request: ChatRequest):
                     "proposal": tool_call,
                 })
                 rejection = "Critic rejected tool call."
+                state = trace_state_transition(trace, state, "ACTOR_THINK", "critic_rejected", step=step + 1)
                 current_prompt = append_tool_feedback(current_prompt, content, rejection, rejected=True)
                 last_content = rejection
                 continue
             
             # If no tool call or finished, return final content
             print("📤 Returning final response.")
+            trace_state_transition(trace, state, "ANSWER", "direct_response", step=step + 1)
             return make_response(content, trace=trace, request_id=request_id)
                 
         except Exception as e:
             print(f"⚠️ Chat Exception: {str(e)}")
+            trace_state_transition(trace, state, "TERMINAL_ERROR", "exception", step=step + 1)
             return make_response(
                 f"Error: {str(e)}",
                 trace=trace + [{"type": "exception", "step": step + 1, "message": str(e)}],
@@ -522,6 +555,7 @@ async def chat(request: ChatRequest):
                 request_duration_ms=int((time.time() - request_started_at) * 1000),
             )
     
+    trace_state_transition(trace, state, "STALLED", "max_steps_reached", step=3)
     return make_response(
         last_content,
         trace=trace,

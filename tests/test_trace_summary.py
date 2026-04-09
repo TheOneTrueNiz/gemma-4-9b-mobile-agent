@@ -7,13 +7,15 @@ class TraceSummaryTests(unittest.TestCase):
     def test_summarize_trace_formats_known_entries(self):
         trace = [
             {"type": "request", "message": "battery"},
+            {"type": "state_transition", "from_state": "INIT", "to_state": "ACTOR_THINK", "reason": "request_completion"},
             {"type": "fast_path_tool", "tool": "get_battery_status", "status": "ok", "duration_ms": 12},
             {"type": "fast_path_search", "query": "termux", "status": "ok", "result_count": 3},
         ]
         summary = summarize_trace(trace)
         self.assertIn("request: battery", summary[0])
-        self.assertIn("get_battery_status", summary[1])
-        self.assertIn("results=3", summary[2])
+        self.assertIn("INIT -> ACTOR_THINK", summary[1])
+        self.assertIn("get_battery_status", summary[2])
+        self.assertIn("results=3", summary[3])
 
     def test_make_response_includes_trace_summary(self):
         payload = make_response(
