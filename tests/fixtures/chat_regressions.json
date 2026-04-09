@@ -28,10 +28,12 @@
     "message": "search the web for termux llama.cpp android",
     "expected_mode": "fast_path",
     "response_contains": [
-      "Search results for 'termux llama.cpp android':"
+      "Search results for 'termux llama.cpp android':",
+      "["
     ],
     "trace_types": [
-      "request"
+      "request",
+      "fast_path_search"
     ]
   }
 ]
