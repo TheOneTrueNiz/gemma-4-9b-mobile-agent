@@ -1,78 +1,94 @@
-# Gemma 4 Mobile Agent: Your Local Mobile AI Agent 📱🤖
+![Gemini_Generated_Image_ez117mez117mez11](https://github.com/user-attachments/assets/8d04d75f-ca36-465e-bbfa-ffa72ba2cf1b)
 
-Gemma 4 Mobile Agent is a powerful, locally-hosted AI agent designed to run directly on your phone via Termux. It leverages the latest **Gemma 4** models (released April 2, 2026): **E4B** for action and **E2B** for critical review.
+Made for people who want their AI running on the device in their pocket, not phoning home to California.
 
-## ✨ Features
+# Gemma 4 Mobile Agent
 
-- **Local Execution:** No internet required for reasoning.
-- **Proposer-Critic (SmolClaw):** Dual-model architecture for safer and more reliable tool usage.
-- **Gemma 4 Edge Models:** Native multimodal capabilities (Text, Image, Audio) and MoE architecture for extreme speed on mobile.
-- **Fast-Path Router:** Instant response for common commands without LLM overhead.
-- **Phone Tools:** Control torch, vibrate, battery, location, clipboard, TTS, and more.
-- **Web Search:** Integrated with DuckDuckGo for real-time information.
-- **Memory Management:** Remembers past facts and context.
+**A real, offline AI agent that runs on your Android phone in Termux.**
 
-## 🛠️ Installation Guide (Termux)
+Uses Gemma 4's new edge models:
+- **E4B** (Actor) — proposes actions and tool calls
+- **E2B** (Critic) — reviews every proposal for safety, logic, and usefulness
 
-### 1. Install Termux
-Download and install the latest Termux from [F-Droid](https://f-droid.org/en/packages/com.termux/).
+No cloud. No API keys. No bullshit. Just the phone, Termux, and GGUF models.
 
-### 2. Update and Install Dependencies
-Run the following commands in Termux:
+### Core Architecture (Proposer-Critic Loop)
+
+1. **Fast-Path Router** — Instant responses for simple commands (torch on, vibrate, etc.) — skips the LLM entirely.
+2. **Actor (Gemma-4-E4B)** — Takes user input and proposes a tool call or plan.
+3. **Critic (Gemma-4-E2B)** — Evaluates the proposal. Rejects if unsafe, illogical, or low-value. Can ask for revision.
+4. **Tool Execution** — If approved, the tool runs via Termux-API.
+5. **Synthesis** — Actor turns the tool result into a natural language response.
+
+This loop makes the agent far more reliable than single-model tool use on tiny hardware.
+
+Recent addition: **MemSpire** hierarchical memory system for persistent context and long-term facts.
+
+### Features
+
+- Fully local & offline (after model download)
+- Multimodal support (text + image + audio via Gemma 4)
+- Direct phone hardware control:
+  - Flashlight (torch)
+  - Vibration
+  - Location
+  - Battery status
+  - Clipboard
+  - Text-to-Speech (TTS)
+  - Camera access
+- Web search fallback via DuckDuckGo (when you actually need fresh info)
+- Web UI served on `http://localhost:1337` (open in any mobile browser)
+- Low-latency MoE architecture from Gemma 4
+
+### Project Structure
+
+gemma-4-9b-mobile-agent/
+├── backend/          # Server, llama-server integration, routing logic
+├── tools/            # Termux-API wrappers (torch, vibrate, location, etc.)
+├── models/           # Put your GGUF files here (not tracked)
+├── test_gemma4.py
+├── test_memspire_integration.py
+├── test_system.py
+├── requirements.txt
+├── Modelfile
+└── backend/main.py   # Main entry point
+
+
+### Installation (Termux)
 
 ```bash
-pkg update && pkg upgrade
-pkg install python git termux-api cmake make clang
-```
+# 1. Install Termux from F-Droid (not Play Store)
+pkg update && pkg upgrade -y
+pkg install python git termux-api cmake make clang -y
 
-### 3. Clone the Repository
-```bash
-git clone https://github.com/yourusername/gemma-4-mobile-agent.git
-cd gemma-4-mobile-agent
-```
+# 2. Clone
+git clone https://github.com/TheOneTrueNiz/gemma-4-9b-mobile-agent.git
+cd gemma-4-9b-mobile-agent
 
-### 4. Install Python Requirements
-```bash
+# 3. Python deps
 pip install -r requirements.txt
-```
 
-### 5. Download Gemma 4 Models
-You will need the GGUF versions of Gemma 4 models. Place them in the `models/` directory:
-- `gemma-4-e4b-it-q4_k_m.gguf` (Actor - 4B)
-- `gemma-4-e2b-it-q4_k_m.gguf` (Critic - 2B)
+# 4. Download models (GGUF Q4_K_M recommended for mobile)
+# Get them from Hugging Face (bartowski or unsloth quantizations)
+mkdir -p models
+# Place:
+#   gemma-4-e4b-it-q4_k_m.gguf
+#   gemma-4-e2b-it-q4_k_m.gguf
 
-*You can download these from Hugging Face repositories (e.g., bartowski or unsloth).*
+### llama-server setup (required):
+Build or copy llama-server binary from llama.cpp into backend/.
 
+cd backend
+python main.py
 
-### 6. Get `llama-server`
-You'll need a compatible `llama-server` binary for Termux (aarch64). You can build it from `llama.cpp` or find a pre-built binary and place it in `backend/llama-server`.
+Then open your phone browser to http://localhost:1337
 
-```bash
-# Example build from source
-git clone https://github.com/ggml-org/llama.cpp
-cd llama.cpp
-make llama-server
-cp llama-server ../gemma-4-mobile-agent/backend/
-```
+Current Status
 
+This is early but functional. The proposer-critic loop + fast-path router already makes it more trustworthy than most tiny agents. MemSpire integration landed yesterday.
 
-## 🚀 Running the Agent
+Tests are in the root if you want to poke around.
 
-Start the backend server:
-```bash
-python backend/main.py
-```
+License
+MIT
 
-Access the UI at: `http://localhost:1337` in your mobile browser.
-
-## ⚙️ How it Works
-
-1. **Router:** Checks if the query matches a "Fast-Path" (e.g., "torch on").
-2. **Actor (Gemma 4 E4B):** If not a fast-path, the Actor model proposes a tool call based on the user's request.
-3. **Critic (Gemma 4 E2B):** The Critic model reviews the proposed tool call for safety and logic.
-4. **Tool Execution:** If approved, the tool is executed via `termux-api`.
-5. **Synthesis:** The Actor generates a final response based on the tool result.
-
-
-## ⚖️ License
-MIT License.
