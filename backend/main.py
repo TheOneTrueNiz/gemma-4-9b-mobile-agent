@@ -340,6 +340,13 @@ def append_tool_feedback(prompt, assistant_content, tool_result, *, blocked=Fals
     return prompt
 
 
+def append_json_repair_feedback(prompt, assistant_content):
+    prompt += f"{assistant_content}\n"
+    prompt += "System: Your last tool JSON was malformed or incomplete. If you need a tool, respond with valid raw JSON only. Otherwise answer directly in plain text.\n"
+    prompt += "Assistant:"
+    return prompt
+
+
 def tool_call_signature(tool_name, args):
     normalized_items = []
     for key in sorted((args or {}).keys()):
@@ -416,8 +423,17 @@ async def chat(request: ChatRequest):
                     "raw": tool_json_raw[:240],
                     "parsed": tool_call,
                 })
+                if tool_call is None:
+                    trace.append({
+                        "type": "tool_parse",
+                        "step": step + 1,
+                        "status": "malformed",
+                    })
+                    current_prompt = append_json_repair_feedback(current_prompt, content)
+                    last_content = content
+                    continue
                 
-                if tool_call and verify_with_critic(json.dumps(tool_call)):
+                if verify_with_critic(json.dumps(tool_call)):
                     trace.append({
                         "type": "critic",
                         "step": step + 1,
@@ -477,17 +493,16 @@ async def chat(request: ChatRequest):
                         # Feed result back and loop
                         current_prompt = append_tool_feedback(current_prompt, content, result)
                         continue 
-                elif tool_call:
-                    trace.append({
-                        "type": "critic",
-                        "step": step + 1,
-                        "status": "rejected",
-                        "proposal": tool_call,
-                    })
-                    rejection = "Critic rejected tool call."
-                    current_prompt = append_tool_feedback(current_prompt, content, rejection, rejected=True)
-                    last_content = rejection
-                    continue
+                trace.append({
+                    "type": "critic",
+                    "step": step + 1,
+                    "status": "rejected",
+                    "proposal": tool_call,
+                })
+                rejection = "Critic rejected tool call."
+                current_prompt = append_tool_feedback(current_prompt, content, rejection, rejected=True)
+                last_content = rejection
+                continue
             
             # If no tool call or finished, return final content
             print("📤 Returning final response.")

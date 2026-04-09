@@ -1,6 +1,6 @@
 import unittest
 
-from backend.main import append_tool_feedback, tool_call_signature
+from backend.main import append_json_repair_feedback, append_tool_feedback, tool_call_signature
 
 
 class AgentRecoveryTests(unittest.TestCase):
@@ -18,6 +18,11 @@ class AgentRecoveryTests(unittest.TestCase):
         left = tool_call_signature("web_search", {"query": "termux", "limit": 3})
         right = tool_call_signature("web_search", {"limit": 3, "query": "termux"})
         self.assertEqual(left, right)
+
+    def test_append_json_repair_feedback_adds_hint(self):
+        prompt = append_json_repair_feedback("User: test\nAssistant:", '{"tool": "oops"')
+        self.assertIn("malformed or incomplete", prompt)
+        self.assertTrue(prompt.endswith("Assistant:"))
 
 
 if __name__ == "__main__":
