@@ -25,7 +25,7 @@
 
         function App() {
             const [messages, setMessages] = useState([
-                { user: "", assistant: "Hello! I'm your Gemma 4 Mobile Agent. I'm ready to help with your phone, search the web, or access your files.", trace: [], mode: "system", requestId: "welcome" }
+                { user: "", assistant: "Hello! I'm your Gemma 4 Mobile Agent. I'm ready to help with your phone, search the web, or access your files.", trace: [], traceSummary: [], mode: "system", requestId: "welcome" }
             ]);
             const [input, setInput] = useState("");
             const [loading, setLoading] = useState(false);
@@ -53,7 +53,7 @@
                 setInput("");
                 setLoading(true);
                 
-                setMessages(prev => [...prev, { user: userMessage, assistant: "Thinking...", trace: [], mode: "pending", requestId: `pending-${Date.now()}` }]);
+                setMessages(prev => [...prev, { user: userMessage, assistant: "Thinking...", trace: [], traceSummary: [], mode: "pending", requestId: `pending-${Date.now()}` }]);
 
                 try {
                     const history = messages.filter(m => m.user).map(m => ({ user: m.user, assistant: m.assistant }));
@@ -68,6 +68,7 @@
                         const updated = [...prev];
                         updated[updated.length - 1].assistant = data.response;
                         updated[updated.length - 1].trace = data.trace || [];
+                        updated[updated.length - 1].traceSummary = data.trace_summary || [];
                         updated[updated.length - 1].mode = data.mode || "agentic";
                         updated[updated.length - 1].requestId = data.request_id || updated[updated.length - 1].requestId;
                         return updated;
@@ -77,6 +78,7 @@
                         const updated = [...prev];
                         updated[updated.length - 1].assistant = "⚠️ Error connecting to the agent. Make sure the server is running.";
                         updated[updated.length - 1].trace = [{ type: "exception", message: String(error) }];
+                        updated[updated.length - 1].traceSummary = [`exception: ${String(error)}`];
                         updated[updated.length - 1].mode = "error";
                         return updated;
                     });
@@ -156,6 +158,16 @@
                                 <div className="message-bubble assistant-bubble shadow-sm text-sm whitespace-pre-wrap">
                                     {m.assistant}
                                 </div>
+                                {showTrace && m.traceSummary && m.traceSummary.length > 0 && (
+                                    <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                                        <div className="mb-2 font-semibold uppercase tracking-wide text-amber-700">Trace Summary</div>
+                                        <div className="space-y-1">
+                                            {m.traceSummary.map((line, idx) => (
+                                                <div key={idx} className="whitespace-pre-wrap">{line}</div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                                 {showTrace && visibleTrace(m.trace).length > 0 && (
                                     <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
                                         <div className="mb-2 flex items-center justify-between font-semibold uppercase tracking-wide text-slate-500">

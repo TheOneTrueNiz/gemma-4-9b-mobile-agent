@@ -235,10 +235,40 @@ class ChatRequest(BaseModel):
     history: list = []
 
 
+def summarize_trace(trace):
+    lines = []
+    for item in trace or []:
+        item_type = item.get("type", "unknown")
+        if item_type == "request":
+            lines.append(f"request: {item.get('message', '')}")
+        elif item_type in {"fast_path_tool", "tool_execution"}:
+            lines.append(
+                f"{item_type}: {item.get('tool')} status={item.get('status')} duration_ms={item.get('duration_ms', 'n/a')}"
+            )
+        elif item_type == "fast_path_search":
+            lines.append(
+                f"fast_path_search: query={item.get('query', '')} status={item.get('status')} results={item.get('result_count', 0)}"
+            )
+        elif item_type == "actor":
+            lines.append(f"actor step {item.get('step')}: {item.get('status')}")
+        elif item_type == "critic":
+            lines.append(f"critic step {item.get('step')}: {item.get('status')}")
+        elif item_type == "tool_parse":
+            parsed = item.get("parsed") or {}
+            lines.append(f"tool_parse step {item.get('step')}: {parsed.get('tool', 'unknown')}")
+        elif item_type == "exception":
+            lines.append(f"exception: {item.get('message', '')}")
+        else:
+            lines.append(f"{item_type}: {json.dumps(item, ensure_ascii=False)}")
+    return lines
+
+
 def make_response(response, trace=None, mode="agentic", request_id=None):
+    active_trace = trace or []
     return {
         "response": response,
-        "trace": trace or [],
+        "trace": active_trace,
+        "trace_summary": summarize_trace(active_trace),
         "mode": mode,
         "request_id": request_id,
     }
