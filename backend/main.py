@@ -310,6 +310,14 @@ def append_tool_feedback(prompt, assistant_content, tool_result, *, blocked=Fals
     return prompt
 
 
+def tool_call_signature(tool_name, args):
+    normalized_items = []
+    for key in sorted((args or {}).keys()):
+        value = args[key]
+        normalized_items.append((key, json.dumps(value, sort_keys=True)))
+    return tool_name, tuple(normalized_items)
+
+
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
@@ -340,6 +348,7 @@ async def chat(request: ChatRequest):
     # 2. Agentic Loop (Max 3 steps)
     current_prompt = format_actor_prompt(request.message, request.history)
     last_content = ""
+    seen_tool_calls = set()
     
     for step in range(3):
         print(f"🤖 ACTOR step {step+1} is thinking...")
@@ -401,9 +410,26 @@ async def chat(request: ChatRequest):
                         current_prompt = append_tool_feedback(current_prompt, content, result, blocked=True)
                         last_content = result
                         continue
+
+                    signature = tool_call_signature(tool_name, args)
+                    if signature in seen_tool_calls:
+                        result = f"Blocked repeated tool call: {tool_name}"
+                        print(f"🛑 {result}")
+                        trace.append({
+                            "type": "tool_execution",
+                            "step": step + 1,
+                            "tool": tool_name,
+                            "args": args,
+                            "status": "blocked_repeat",
+                            "reason": "duplicate_tool_call",
+                        })
+                        current_prompt = append_tool_feedback(current_prompt, content, result, blocked=True)
+                        last_content = result
+                        continue
                     
                     if tool_name in AVAILABLE_TOOLS:
                         print(f"🚀 Executing tool: {tool_name}")
+                        seen_tool_calls.add(signature)
                         try:
                             result = AVAILABLE_TOOLS[tool_name](**args)
                         except Exception as te:

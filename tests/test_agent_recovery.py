@@ -1,6 +1,6 @@
 import unittest
 
-from backend.main import append_tool_feedback
+from backend.main import append_tool_feedback, tool_call_signature
 
 
 class AgentRecoveryTests(unittest.TestCase):
@@ -13,6 +13,11 @@ class AgentRecoveryTests(unittest.TestCase):
         prompt = append_tool_feedback("User: test\nAssistant:", '{"tool":"x"}', "Critic rejected tool call.", rejected=True)
         self.assertIn("critic rejected", prompt.lower())
         self.assertTrue(prompt.endswith("Assistant:"))
+
+    def test_tool_call_signature_is_order_stable(self):
+        left = tool_call_signature("web_search", {"query": "termux", "limit": 3})
+        right = tool_call_signature("web_search", {"limit": 3, "query": "termux"})
+        self.assertEqual(left, right)
 
 
 if __name__ == "__main__":
