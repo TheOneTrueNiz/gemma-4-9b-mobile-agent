@@ -229,6 +229,29 @@
             border-color: rgba(110, 231, 210, 0.28);
         }
 
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .app-tile {
+            border-radius: 24px;
+            border: 1px solid rgba(139, 208, 255, 0.12);
+            background: linear-gradient(180deg, rgba(18, 39, 51, 0.92), rgba(7, 17, 24, 0.94));
+            padding: 16px;
+            text-align: left;
+            transition: transform 160ms ease, border-color 160ms ease;
+        }
+
+        .app-tile:active {
+            transform: scale(0.98);
+        }
+
+        .app-tile:hover {
+            border-color: rgba(107, 184, 255, 0.32);
+        }
+
         .sheet-card {
             border-radius: 22px;
             border: 1px solid rgba(139, 208, 255, 0.12);
@@ -426,6 +449,10 @@
             .surface-card.wide {
                 grid-column: span 1;
             }
+
+            .app-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -549,6 +576,36 @@
                 device: quickActions.filter(action => action.group === "device"),
                 utility: quickActions.filter(action => action.group === "utility"),
             };
+            const appTiles = [
+                {
+                    key: "device",
+                    title: "Device Deck",
+                    subtitle: "Battery, location, clipboard, torch",
+                    badge: "OPS",
+                    command: "battery",
+                },
+                {
+                    key: "utility",
+                    title: "Utility Lab",
+                    subtitle: "Math, time, conversion, text tools",
+                    badge: "TOOLS",
+                    command: "convert 5 miles to km",
+                },
+                {
+                    key: "memory",
+                    title: "Memory Vault",
+                    subtitle: "Recall and reinforce stored context",
+                    badge: "MEM",
+                    command: "recall what you know about this project",
+                },
+                {
+                    key: "research",
+                    title: "Research Port",
+                    subtitle: "Search the live web from the launcher",
+                    badge: "WEB",
+                    command: "search the web for gemma mobile agent news",
+                },
+            ];
 
             const visibleTrace = (trace) => {
                 if (!trace || traceFilter === "all") return trace || [];
@@ -647,6 +704,18 @@
                                         </div>
                                         <div className="mt-2 text-sm leading-6 text-slate-300">
                                             {lastMessage?.assistant || "No prior turn yet."}
+                                        </div>
+                                    </div>
+                                    <div className="surface-card wide">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">App Layer</div>
+                                        <div className="app-grid mt-3">
+                                            {appTiles.map((tile) => (
+                                                <button key={tile.key} onClick={() => sendMessage(tile.command)} className="app-tile">
+                                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{tile.badge}</div>
+                                                    <div className="mt-3 text-xl font-bold tracking-[-0.03em] text-white">{tile.title}</div>
+                                                    <div className="mt-2 text-sm leading-6 text-slate-300">{tile.subtitle}</div>
+                                                </button>
+                                            ))}
                                         </div>
                                     </div>
                                     <div className="surface-card wide">
