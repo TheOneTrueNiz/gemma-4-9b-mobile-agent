@@ -455,6 +455,7 @@
             const [traceFilter, setTraceFilter] = useState("all");
             const [activeSheet, setActiveSheet] = useState(null);
             const [surfaceMode, setSurfaceMode] = useState("home");
+            const [homeClock, setHomeClock] = useState("");
             const chatEndRef = useRef(null);
 
             useEffect(() => {
@@ -466,6 +467,16 @@
                     .then((res) => res.json())
                     .then((data) => setStatus(data))
                     .catch(() => setStatus({ actor_online: false, actor_model: "Offline" }));
+            }, []);
+
+            useEffect(() => {
+                const updateClock = () => {
+                    const now = new Date();
+                    setHomeClock(now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+                };
+                updateClock();
+                const timer = setInterval(updateClock, 1000 * 30);
+                return () => clearInterval(timer);
             }, []);
 
             const sendMessage = async (text) => {
@@ -570,6 +581,13 @@
             };
 
             const lastMessage = messages[messages.length - 1];
+            const lastRoute = getTraceMeta(lastMessage || {});
+            const homeHighlights = [
+                { label: "Runtime", value: status.actor_online ? "ONLINE" : "OFFLINE", accent: "text-emerald-300" },
+                { label: "Mode", value: surfaceMode.toUpperCase(), accent: "text-cyan-200" },
+                { label: "Route", value: (lastRoute.route || "standby").toUpperCase(), accent: "text-amber-200" },
+                { label: "Clock", value: homeClock || "--:--", accent: "text-white" },
+            ];
 
             return (
                 <div className="app-shell">
@@ -631,6 +649,17 @@
                                             {lastMessage?.assistant || "No prior turn yet."}
                                         </div>
                                     </div>
+                                    <div className="surface-card wide">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Ambient Layer</div>
+                                        <div className="mt-3 grid grid-cols-2 gap-3">
+                                            {homeHighlights.map((item) => (
+                                                <div key={item.label} className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                                    <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.label}</div>
+                                                    <div className={`mt-2 text-lg font-bold tracking-[-0.03em] ${item.accent}`}>{item.value}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                     <div className="surface-card">
                                         <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Device Group</div>
                                         <div className="mt-3 grid gap-2">
@@ -651,6 +680,19 @@
                                                     <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
                                                 </button>
                                             ))}
+                                        </div>
+                                    </div>
+                                    <div className="surface-card wide">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Suggested Ops</div>
+                                        <div className="mt-3 grid gap-2">
+                                            <button onClick={() => sendMessage("what time is it in utc")} className="app-pill">
+                                                <div className="text-sm font-bold text-white">Sync Time Layer</div>
+                                                <div className="mt-1 text-xs text-slate-400">Check current UTC context for the runtime.</div>
+                                            </button>
+                                            <button onClick={() => sendMessage("battery")} className="app-pill">
+                                                <div className="text-sm font-bold text-white">Inspect Device Power</div>
+                                                <div className="mt-1 text-xs text-slate-400">Pull a fresh battery snapshot without leaving the launcher surface.</div>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
