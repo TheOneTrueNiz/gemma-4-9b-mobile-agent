@@ -55,6 +55,7 @@ class FastPathRouter:
             (r"^(search|look up|find) (the web for )?(.*)$", self.handle_web_search),
 
         ]
+        self.math_pattern = re.compile(r"[0-9][0-9\.\s\+\-\*\/%\(\)]*[0-9\)]")
 
     def handle_open_search(self, match):
         site = match.group(1).lower()
@@ -132,6 +133,36 @@ class FastPathRouter:
             }],
         }
 
+    def handle_calculate(self, expression, user_message):
+        return self.execute_tool(
+            "calculate",
+            {"expression": expression},
+            user_message,
+            formatter=lambda result: f"{expression} = {result}",
+            route="calculate",
+        )
+
+    def maybe_route_math(self, message):
+        clean_msg = message.lower().strip()
+        candidate = clean_msg
+        for prefix in (
+            "what is ",
+            "what's ",
+            "calculate ",
+            "compute ",
+            "solve ",
+            "evaluate ",
+        ):
+            if candidate.startswith(prefix):
+                candidate = candidate[len(prefix):]
+                break
+        candidate = candidate.rstrip(" ?")
+        if not self.math_pattern.fullmatch(candidate):
+            return None
+        if not any(op in candidate for op in ("+", "-", "*", "/", "%", "(", ")")):
+            return None
+        return self.handle_calculate(candidate, message)
+
 
     def handle_brightness(self, match):
         level = int(match.group(2))
@@ -187,6 +218,10 @@ class FastPathRouter:
     def route(self, message):
         """Checks if a message matches any fast-path patterns."""
         clean_msg = message.lower().strip()
+        math_route = self.maybe_route_math(message)
+        if math_route:
+            print(f"⚡ Fast-Path math match found for: '{message}'")
+            return math_route
         for pattern, handler in self.patterns:
             # Use match for greetings to ensure they don't hijack complex sentences
             if "hi|" in pattern or "hello|" in pattern:

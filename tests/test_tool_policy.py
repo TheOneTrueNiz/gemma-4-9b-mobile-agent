@@ -19,8 +19,19 @@ class ToolPolicyTests(unittest.TestCase):
             "remember": object(),
             "send_sms": object(),
             "torch": object(),
+            "calculate": object(),
         }
         selected = select_relevant_tools("turn on the flashlight", tools)
         self.assertIn("torch", selected)
         self.assertIn("web_search", selected)
         self.assertNotIn("send_sms", selected)
+
+    def test_select_relevant_tools_adds_calculate_for_math(self):
+        tools = {
+            "web_search": object(),
+            "recall": object(),
+            "remember": object(),
+            "calculate": object(),
+        }
+        selected = select_relevant_tools("calculate 44 / 11", tools)
+        self.assertIn("calculate", selected)

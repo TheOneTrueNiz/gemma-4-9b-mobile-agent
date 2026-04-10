@@ -51,6 +51,7 @@ TOOL_KEYWORDS = {
     "remember": {"remember", "save", "store", "note"},
     "recall": {"remember", "recall", "memory", "know about"},
     "get_wifi_info": {"wifi", "wi-fi", "network", "ssid"},
+    "calculate": {"calculate", "compute", "solve", "math", "sum", "plus", "minus", "times", "divide"},
 }
 
 DEFAULT_TOOLSET = {

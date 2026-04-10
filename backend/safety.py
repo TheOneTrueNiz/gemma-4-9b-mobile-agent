@@ -115,6 +115,11 @@ def validate_tool_call(available_tools, tool_name, args, user_message):
         if not query:
             return False, normalized_args, "Search query cannot be empty."
 
+    if tool_name == "calculate":
+        expression = str(normalized_args.get("expression", "")).strip()
+        if not expression:
+            return False, normalized_args, "Calculation expression cannot be empty."
+
     if tool_name == "tts_speak":
         text = str(normalized_args.get("text", "")).strip()
         if not text:

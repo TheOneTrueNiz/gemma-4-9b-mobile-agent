@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from backend.router import router
-from tools.phone_tools import extract_duckduckgo_html_results, web_search
+from tools.phone_tools import calculate, extract_duckduckgo_html_results, web_search
 
 
 SAMPLE_HTML = """
@@ -26,6 +26,13 @@ SAMPLE_HTML = """
 
 
 class SearchAndRouterTests(unittest.TestCase):
+    def test_calculate_evaluates_basic_expression(self):
+        self.assertEqual(calculate("2 + 2 * 5"), 12)
+
+    def test_calculate_rejects_unsafe_expression(self):
+        with self.assertRaises(ValueError):
+            calculate("__import__('os').system('id')")
+
     def test_extract_duckduckgo_html_results(self):
         results = extract_duckduckgo_html_results(SAMPLE_HTML)
         self.assertEqual(len(results), 2)
@@ -66,6 +73,11 @@ class SearchAndRouterTests(unittest.TestCase):
         self.assertIn("Search results for 'local llm tools':", response["response"])
         self.assertIn("[example.com]", response["response"])
         self.assertIn("fast_path_search", str(response["trace"]))
+
+    def test_router_routes_math_to_calculator(self):
+        response = router.route("what is 2 + 2 * 5?")
+        self.assertIn("2 + 2 * 5 = 12", response["response"])
+        self.assertEqual(response["trace"][0]["tool"], "calculate")
 
 
 if __name__ == "__main__":

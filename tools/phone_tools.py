@@ -3,6 +3,8 @@ import json
 import os
 import glob
 import re
+import ast
+import operator
 import urllib.request
 import urllib.parse
 from html import unescape
@@ -11,6 +13,21 @@ import requests
 
 SEARCH_HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) GemmaMobileAgent/1.0"
+}
+
+SAFE_MATH_BINARY_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+
+SAFE_MATH_UNARY_OPERATORS = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
 }
 
 def run_termux_command(command):
@@ -66,6 +83,31 @@ def get_time():
     """Returns the current date and time."""
     from datetime import datetime
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _eval_math_node(node):
+    if isinstance(node, ast.Expression):
+        return _eval_math_node(node.body)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in SAFE_MATH_BINARY_OPERATORS:
+        left = _eval_math_node(node.left)
+        right = _eval_math_node(node.right)
+        return SAFE_MATH_BINARY_OPERATORS[type(node.op)](left, right)
+    if isinstance(node, ast.UnaryOp) and type(node.op) in SAFE_MATH_UNARY_OPERATORS:
+        return SAFE_MATH_UNARY_OPERATORS[type(node.op)](_eval_math_node(node.operand))
+    raise ValueError("Unsupported expression")
+
+
+def calculate(expression):
+    """Evaluates a basic arithmetic expression safely."""
+    text = (expression or "").strip()
+    if not text:
+        raise ValueError("Empty expression")
+    if not re.fullmatch(r"[0-9\.\+\-\*\/%\(\)\s]+", text):
+        raise ValueError("Expression contains unsupported characters")
+    parsed = ast.parse(text, mode="eval")
+    return _eval_math_node(parsed)
 
 # --- NEW TOOLS ---
 
@@ -223,5 +265,6 @@ AVAILABLE_TOOLS = {
     "set_clipboard": set_clipboard,
     "open_url": open_url,
     "torch": torch,
-    "get_wifi_info": get_wifi_info
+    "get_wifi_info": get_wifi_info,
+    "calculate": calculate,
 }
