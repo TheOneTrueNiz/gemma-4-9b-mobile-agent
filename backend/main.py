@@ -439,10 +439,11 @@ async def chat(request: ChatRequest):
             })
             state = trace_state_transition(trace, state, "ACTOR_RESPONSE", "completion_received", step=step + 1)
             
-            # Check for tool usage
-            if "{" in content and "}" in content:
+            # Check for tool usage or malformed partial JSON
+            if "{" in content:
                 state = trace_state_transition(trace, state, "TOOL_PARSE", "json_candidate_detected", step=step + 1)
-                start, end = content.find("{"), content.rfind("}") + 1
+                start = content.find("{")
+                end = content.rfind("}") + 1 if "}" in content else len(content)
                 tool_json_raw = content[start:end]
                 tool_call = repair_and_alias_json(tool_json_raw)
                 trace.append({
