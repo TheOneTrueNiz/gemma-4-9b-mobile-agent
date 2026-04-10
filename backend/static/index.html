@@ -195,6 +195,40 @@
             gap: 12px;
         }
 
+        .home-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .surface-card {
+            border-radius: 24px;
+            border: 1px solid rgba(139, 208, 255, 0.12);
+            background: linear-gradient(180deg, rgba(16, 36, 47, 0.88), rgba(7, 17, 24, 0.92));
+            padding: 16px;
+        }
+
+        .surface-card.wide {
+            grid-column: span 2;
+        }
+
+        .app-pill {
+            border-radius: 18px;
+            border: 1px solid rgba(139, 208, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            padding: 12px;
+            text-align: left;
+            transition: transform 160ms ease, border-color 160ms ease;
+        }
+
+        .app-pill:active {
+            transform: scale(0.98);
+        }
+
+        .app-pill:hover {
+            border-color: rgba(110, 231, 210, 0.28);
+        }
+
         .sheet-card {
             border-radius: 22px;
             border: 1px solid rgba(139, 208, 255, 0.12);
@@ -384,6 +418,14 @@
             .sheet-grid {
                 grid-template-columns: 1fr;
             }
+
+            .home-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .surface-card.wide {
+                grid-column: span 1;
+            }
         }
     </style>
 </head>
@@ -412,6 +454,7 @@
             const [showTrace, setShowTrace] = useState(true);
             const [traceFilter, setTraceFilter] = useState("all");
             const [activeSheet, setActiveSheet] = useState(null);
+            const [surfaceMode, setSurfaceMode] = useState("home");
             const chatEndRef = useRef(null);
 
             useEffect(() => {
@@ -481,15 +524,20 @@
             };
 
             const quickActions = [
-                { glyph: "01", label: "Power Check", hint: "Battery", cmd: "battery" },
-                { glyph: "02", label: "Field Scan", hint: "Location", cmd: "get location" },
-                { glyph: "03", label: "Torch", hint: "Flashlight", cmd: "flashlight" },
-                { glyph: "04", label: "Clipboard", hint: "Current copy", cmd: "get clipboard" },
-                { glyph: "05", label: "Math", hint: "2 + 2 * 5", cmd: "what is 2 + 2 * 5?" },
-                { glyph: "06", label: "UTC Clock", hint: "Current UTC", cmd: "what time is it in utc" },
-                { glyph: "07", label: "Convert", hint: "5 miles to km", cmd: "convert 5 miles to km" },
-                { glyph: "08", label: "Utility", hint: "Uppercase", cmd: "uppercase hello phone agent" }
+                { glyph: "01", label: "Power Check", hint: "Battery", cmd: "battery", group: "device" },
+                { glyph: "02", label: "Field Scan", hint: "Location", cmd: "get location", group: "device" },
+                { glyph: "03", label: "Torch", hint: "Flashlight", cmd: "flashlight", group: "device" },
+                { glyph: "04", label: "Clipboard", hint: "Current copy", cmd: "get clipboard", group: "device" },
+                { glyph: "05", label: "Math", hint: "2 + 2 * 5", cmd: "what is 2 + 2 * 5?", group: "utility" },
+                { glyph: "06", label: "UTC Clock", hint: "Current UTC", cmd: "what time is it in utc", group: "utility" },
+                { glyph: "07", label: "Convert", hint: "5 miles to km", cmd: "convert 5 miles to km", group: "utility" },
+                { glyph: "08", label: "Utility", hint: "Uppercase", cmd: "uppercase hello phone agent", group: "utility" }
             ];
+
+            const groupedActions = {
+                device: quickActions.filter(action => action.group === "device"),
+                utility: quickActions.filter(action => action.group === "utility"),
+            };
 
             const visibleTrace = (trace) => {
                 if (!trace || traceFilter === "all") return trace || [];
@@ -546,7 +594,68 @@
                                     </div>
                                 </div>
                             </div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                <button
+                                    onClick={() => setSurfaceMode("home")}
+                                    className="chip mono text-[10px] text-white"
+                                    style={surfaceMode === "home" ? { background: "rgba(110, 231, 210, 0.18)", borderColor: "rgba(110, 231, 210, 0.32)" } : {}}
+                                >
+                                    Home Surface
+                                </button>
+                                <button
+                                    onClick={() => setSurfaceMode("chat")}
+                                    className="chip mono text-[10px] text-white"
+                                    style={surfaceMode === "chat" ? { background: "rgba(107, 184, 255, 0.18)", borderColor: "rgba(107, 184, 255, 0.32)" } : {}}
+                                >
+                                    Chat Stream
+                                </button>
+                            </div>
                         </section>
+
+                        {surfaceMode === "home" && (
+                            <section className="glass-panel rounded-[28px] p-4 stagger-2">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Launcher Surface</div>
+                                        <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Agent Home</div>
+                                    </div>
+                                    <div className="mono text-[11px] uppercase tracking-[0.16em] text-slate-400">Middle layer active</div>
+                                </div>
+                                <div className="home-grid mt-4">
+                                    <div className="surface-card wide">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Runtime Snapshot</div>
+                                        <div className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white">
+                                            {lastMessage?.mode === "pending" ? "Resolving task" : "Standing by"}
+                                        </div>
+                                        <div className="mt-2 text-sm leading-6 text-slate-300">
+                                            {lastMessage?.assistant || "No prior turn yet."}
+                                        </div>
+                                    </div>
+                                    <div className="surface-card">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Device Group</div>
+                                        <div className="mt-3 grid gap-2">
+                                            {groupedActions.device.slice(0, 2).map((action) => (
+                                                <button key={action.label} onClick={() => sendMessage(action.cmd)} className="app-pill">
+                                                    <div className="text-sm font-bold text-white">{action.label}</div>
+                                                    <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="surface-card">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Utility Group</div>
+                                        <div className="mt-3 grid gap-2">
+                                            {groupedActions.utility.slice(0, 2).map((action) => (
+                                                <button key={action.label} onClick={() => sendMessage(action.cmd)} className="app-pill">
+                                                    <div className="text-sm font-bold text-white">{action.label}</div>
+                                                    <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        )}
 
                         <section className="glass-panel rounded-[28px] p-4 stagger-3">
                             <div className="flex items-center justify-between">
@@ -557,7 +666,7 @@
                                 <div className="mono text-[11px] uppercase tracking-[0.16em] text-slate-400">{messages.length - 1} turns</div>
                             </div>
 
-                            <main className="chat-container mt-4">
+                            <main className={`chat-container mt-4 ${surfaceMode === "home" ? "opacity-75" : ""}`}>
                                 {messages.map((m, i) => (
                                     <div key={i}>
                                         {m.user && (
@@ -635,7 +744,7 @@
                             <button onClick={() => toggleSheet("actions")} className="rail-button">
                                 <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Launch</div>
                                 <div className="mt-2 text-sm font-bold text-white">Command Deck</div>
-                                <div className="mt-1 text-xs text-slate-400">Fast actions and utilities</div>
+                                <div className="mt-1 text-xs text-slate-400">Grouped actions and utilities</div>
                             </button>
                             <button onClick={() => toggleSheet("debug")} className="rail-button">
                                 <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Debug</div>
@@ -691,20 +800,44 @@
                                     <button onClick={() => setActiveSheet(null)} className="chip mono text-[10px] text-white">Close</button>
                                 </div>
                                 <div className="mt-4 grid grid-cols-2 gap-3">
-                                    {quickActions.map((action, i) => (
-                                        <button
-                                            key={i}
-                                            onClick={() => {
-                                                sendMessage(action.cmd);
-                                                setActiveSheet(null);
-                                            }}
-                                            className="action-card min-w-0"
-                                        >
-                                            <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
-                                            <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
-                                            <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
-                                        </button>
-                                    ))}
+                                    <div className="col-span-2">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Device Actions</div>
+                                        <div className="mt-3 grid grid-cols-2 gap-3">
+                                            {groupedActions.device.map((action, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => {
+                                                        sendMessage(action.cmd);
+                                                        setActiveSheet(null);
+                                                    }}
+                                                    className="action-card min-w-0"
+                                                >
+                                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
+                                                    <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
+                                                    <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="col-span-2 mt-2">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Utility Actions</div>
+                                        <div className="mt-3 grid grid-cols-2 gap-3">
+                                            {groupedActions.utility.map((action, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => {
+                                                        sendMessage(action.cmd);
+                                                        setActiveSheet(null);
+                                                    }}
+                                                    className="action-card min-w-0"
+                                                >
+                                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
+                                                    <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
+                                                    <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             </section>
                         )}
