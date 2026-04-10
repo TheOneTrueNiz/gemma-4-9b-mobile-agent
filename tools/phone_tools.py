@@ -34,6 +34,45 @@ SAFE_MATH_UNARY_OPERATORS = {
 
 PROCESS_START_MONOTONIC = time.monotonic()
 MONTH_FORMATS = ("%B %d %Y", "%b %d %Y", "%B %d, %Y", "%b %d, %Y", "%B %d", "%b %d")
+DISTANCE_UNITS_IN_METERS = {
+    "m": 1.0,
+    "meter": 1.0,
+    "meters": 1.0,
+    "km": 1000.0,
+    "kilometer": 1000.0,
+    "kilometers": 1000.0,
+    "mi": 1609.344,
+    "mile": 1609.344,
+    "miles": 1609.344,
+    "ft": 0.3048,
+    "foot": 0.3048,
+    "feet": 0.3048,
+}
+WEIGHT_UNITS_IN_KG = {
+    "g": 0.001,
+    "gram": 0.001,
+    "grams": 0.001,
+    "kg": 1.0,
+    "kilogram": 1.0,
+    "kilograms": 1.0,
+    "lb": 0.45359237,
+    "lbs": 0.45359237,
+    "pound": 0.45359237,
+    "pounds": 0.45359237,
+}
+STORAGE_UNITS_IN_BYTES = {
+    "b": 1.0,
+    "byte": 1.0,
+    "bytes": 1.0,
+    "kb": 1000.0,
+    "mb": 1000.0 ** 2,
+    "gb": 1000.0 ** 3,
+    "tb": 1000.0 ** 4,
+    "kib": 1024.0,
+    "mib": 1024.0 ** 2,
+    "gib": 1024.0 ** 3,
+    "tib": 1024.0 ** 4,
+}
 
 def run_termux_command(command):
     try:
@@ -203,6 +242,42 @@ def date_time_reason(query, now=None):
 
     raise ValueError("Unsupported date/time reasoning query")
 
+
+def format_conversion_value(value):
+    rounded = round(float(value), 6)
+    if rounded.is_integer():
+        return str(int(rounded))
+    return f"{rounded:.6f}".rstrip("0").rstrip(".")
+
+
+def convert_units(value, from_unit, to_unit):
+    """Converts deterministic temperature, distance, weight, and storage units."""
+    source = (from_unit or "").strip().lower()
+    target = (to_unit or "").strip().lower()
+    numeric_value = float(value)
+
+    temp_units = {"c", "f", "celsius", "fahrenheit"}
+    if source in temp_units and target in temp_units:
+        if source in {"celsius", "c"} and target in {"fahrenheit", "f"}:
+            return (numeric_value * 9 / 5) + 32
+        if source in {"fahrenheit", "f"} and target in {"celsius", "c"}:
+            return (numeric_value - 32) * 5 / 9
+        return numeric_value
+
+    if source in DISTANCE_UNITS_IN_METERS and target in DISTANCE_UNITS_IN_METERS:
+        meters = numeric_value * DISTANCE_UNITS_IN_METERS[source]
+        return meters / DISTANCE_UNITS_IN_METERS[target]
+
+    if source in WEIGHT_UNITS_IN_KG and target in WEIGHT_UNITS_IN_KG:
+        kilograms = numeric_value * WEIGHT_UNITS_IN_KG[source]
+        return kilograms / WEIGHT_UNITS_IN_KG[target]
+
+    if source in STORAGE_UNITS_IN_BYTES and target in STORAGE_UNITS_IN_BYTES:
+        bytes_value = numeric_value * STORAGE_UNITS_IN_BYTES[source]
+        return bytes_value / STORAGE_UNITS_IN_BYTES[target]
+
+    raise ValueError("Unsupported conversion units")
+
 # --- NEW TOOLS ---
 
 def list_files(directory="."):
@@ -364,4 +439,5 @@ AVAILABLE_TOOLS = {
     "get_utc_time": get_utc_time,
     "get_chronometer": get_chronometer,
     "date_time_reason": date_time_reason,
+    "convert_units": convert_units,
 }

@@ -6,7 +6,7 @@ import time
 
 # Add tools to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from tools.phone_tools import AVAILABLE_TOOLS
+from tools.phone_tools import AVAILABLE_TOOLS, format_conversion_value
 from backend.safety import validate_tool_call
 
 class FastPathRouter:
@@ -66,6 +66,9 @@ class FastPathRouter:
             "how long have you been running",
             "chronometer",
             "elapsed time",
+        )
+        self.conversion_pattern = re.compile(
+            r"^(?:convert\s+)?(?P<value>-?\d+(?:\.\d+)?)\s*(?P<from_unit>[a-zA-Z]+)\s+(?:to|in)\s+(?P<to_unit>[a-zA-Z]+)\??$"
         )
 
     def handle_open_search(self, match):
@@ -161,6 +164,15 @@ class FastPathRouter:
             route="date_time_reason",
         )
 
+    def handle_convert_units(self, value, from_unit, to_unit, user_message):
+        return self.execute_tool(
+            "convert_units",
+            {"value": value, "from_unit": from_unit, "to_unit": to_unit},
+            user_message,
+            formatter=lambda result: f"{format_conversion_value(float(value))} {from_unit} = {format_conversion_value(result)} {to_unit}",
+            route="convert_units",
+        )
+
     def maybe_route_math(self, message):
         clean_msg = message.lower().strip()
         candidate = clean_msg
@@ -187,6 +199,18 @@ class FastPathRouter:
         if any(clean_msg.startswith(prefix) or clean_msg == prefix for prefix in self.datetime_prefixes):
             return self.handle_date_time_reason(clean_msg.rstrip(" ?"), message)
         return None
+
+    def maybe_route_conversion(self, message):
+        clean_msg = message.lower().strip()
+        match = self.conversion_pattern.fullmatch(clean_msg)
+        if not match:
+            return None
+        return self.handle_convert_units(
+            match.group("value"),
+            match.group("from_unit"),
+            match.group("to_unit"),
+            message,
+        )
 
 
     def handle_brightness(self, match):
@@ -251,6 +275,10 @@ class FastPathRouter:
         if datetime_route:
             print(f"⚡ Fast-Path datetime match found for: '{message}'")
             return datetime_route
+        conversion_route = self.maybe_route_conversion(message)
+        if conversion_route:
+            print(f"⚡ Fast-Path conversion match found for: '{message}'")
+            return conversion_route
         for pattern, handler in self.patterns:
             # Use match for greetings to ensure they don't hijack complex sentences
             if "hi|" in pattern or "hello|" in pattern:

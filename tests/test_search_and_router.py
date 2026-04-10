@@ -4,7 +4,7 @@ from unittest.mock import patch
 from backend.router import router
 from datetime import datetime
 
-from tools.phone_tools import calculate, date_time_reason, extract_duckduckgo_html_results, web_search
+from tools.phone_tools import calculate, convert_units, date_time_reason, extract_duckduckgo_html_results, web_search
 
 
 SAMPLE_HTML = """
@@ -42,6 +42,18 @@ class SearchAndRouterTests(unittest.TestCase):
     def test_date_time_reason_handles_days_until(self):
         result = date_time_reason("how many days until april 20 2026", now=datetime(2026, 4, 10, 12, 0, 0))
         self.assertEqual(result, "10 days")
+
+    def test_convert_units_temperature(self):
+        self.assertEqual(convert_units(100, "c", "f"), 212)
+
+    def test_convert_units_distance(self):
+        self.assertAlmostEqual(convert_units(5, "miles", "km"), 8.04672, places=5)
+
+    def test_convert_units_weight(self):
+        self.assertAlmostEqual(convert_units(10, "kg", "lb"), 22.0462262, places=6)
+
+    def test_convert_units_storage(self):
+        self.assertEqual(convert_units(2048, "mb", "gb"), 2.048)
 
     def test_extract_duckduckgo_html_results(self):
         results = extract_duckduckgo_html_results(SAMPLE_HTML)
@@ -98,6 +110,11 @@ class SearchAndRouterTests(unittest.TestCase):
             response = router.route("what day is 10 days from now")
         self.assertEqual(response["trace"][0]["tool"], "date_time_reason")
         self.assertIn("2026-04-20 is a Monday", response["response"])
+
+    def test_router_routes_unit_conversion(self):
+        response = router.route("convert 5 miles to km")
+        self.assertIn("5 miles =", response["response"])
+        self.assertEqual(response["trace"][0]["tool"], "convert_units")
 
 
 if __name__ == "__main__":

@@ -125,6 +125,17 @@ def validate_tool_call(available_tools, tool_name, args, user_message):
         if not query:
             return False, normalized_args, "Date/time reasoning query cannot be empty."
 
+    if tool_name == "convert_units":
+        from_unit = str(normalized_args.get("from_unit", "")).strip()
+        to_unit = str(normalized_args.get("to_unit", "")).strip()
+        value = normalized_args.get("value")
+        try:
+            float(value)
+        except Exception:
+            return False, normalized_args, "Conversion value must be numeric."
+        if not from_unit or not to_unit:
+            return False, normalized_args, "Conversion requires from_unit and to_unit."
+
     if tool_name == "tts_speak":
         text = str(normalized_args.get("text", "")).strip()
         if not text:
