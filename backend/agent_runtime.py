@@ -50,9 +50,9 @@ class AgentRuntime:
         request_completion,
         verify_with_critic,
         requires_critic_review,
+        select_runtime_budget,
         format_actor_prompt,
         make_response,
-        max_steps=3,
     ):
         self.available_tools = available_tools
         self.validate_tool_call = validate_tool_call
@@ -60,22 +60,35 @@ class AgentRuntime:
         self.request_completion = request_completion
         self.verify_with_critic = verify_with_critic
         self.requires_critic_review = requires_critic_review
+        self.select_runtime_budget = select_runtime_budget
         self.format_actor_prompt = format_actor_prompt
         self.make_response = make_response
-        self.max_steps = max_steps
 
     def run(self, *, message, history, trace, request_id, request_started_at):
+        runtime_budget = self.select_runtime_budget(message)
         current_prompt = self.format_actor_prompt(message, history)
         last_content = ""
         seen_tool_calls = set()
         state = "INIT"
+        trace.append({
+            "type": "runtime_budget",
+            "complexity": runtime_budget["complexity"],
+            "hardware_profile": runtime_budget["hardware_profile"],
+            "n_predict": runtime_budget["n_predict"],
+            "max_steps": runtime_budget["max_steps"],
+            "completion_timeout": runtime_budget["completion_timeout"],
+        })
         trace_state_transition(trace, "REQUEST_RECEIVED", state, "agentic_path_selected")
 
-        for step in range(self.max_steps):
+        for step in range(runtime_budget["max_steps"]):
             step_number = step + 1
             state = trace_state_transition(trace, state, "ACTOR_THINK", "request_completion", step=step_number)
             try:
-                response = self.request_completion(current_prompt)
+                response = self.request_completion(
+                    current_prompt,
+                    n_predict=runtime_budget["n_predict"],
+                    timeout=runtime_budget["completion_timeout"],
+                )
             except Exception as exc:
                 trace_state_transition(trace, state, "TERMINAL_ERROR", "exception", step=step_number)
                 return self.make_response(
@@ -228,7 +241,7 @@ class AgentRuntime:
                 request_duration_ms=self._request_duration_ms(request_started_at),
             )
 
-        trace_state_transition(trace, state, "STALLED", "max_steps_reached", step=self.max_steps)
+        trace_state_transition(trace, state, "STALLED", "max_steps_reached", step=runtime_budget["max_steps"])
         return self.make_response(
             last_content,
             trace=trace,

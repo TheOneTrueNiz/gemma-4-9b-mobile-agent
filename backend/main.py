@@ -43,6 +43,7 @@ from backend.memory_retrieval import (
     recall_results,
 )
 from backend.tool_policy import requires_critic_review, select_relevant_tools
+from backend.runtime_budget import select_runtime_budget
 
 # --- SMOLCLAW PATTERN: ARGUMENT ALIASING & REPAIR ---
 ARG_ALIASES = {
@@ -319,13 +320,13 @@ def verify_with_critic(proposal):
         return True # Default to pass
 
 
-def request_actor_completion(prompt, *, n_predict=512):
+def request_actor_completion(prompt, *, n_predict=192, timeout=75):
     return requests.post("http://localhost:8888/completion", json={
         "prompt": prompt,
         "n_predict": n_predict,
         "stop": ["User:", "Assistant:", "<|turn|>", "<turn|>", "<eos>"],
         "stream": False,
-    }, timeout=120)
+    }, timeout=timeout)
 
 
 
@@ -365,6 +366,7 @@ async def chat(request: ChatRequest):
         request_completion=request_actor_completion,
         verify_with_critic=verify_with_critic,
         requires_critic_review=requires_critic_review,
+        select_runtime_budget=select_runtime_budget,
         format_actor_prompt=format_actor_prompt,
         make_response=make_response,
     )

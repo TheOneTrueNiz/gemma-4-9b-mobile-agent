@@ -44,9 +44,15 @@ class AgentRuntimeTests(unittest.TestCase):
             request_completion=request_completion,
             verify_with_critic=verify_with_critic or (lambda proposal: True),
             requires_critic_review=lambda tool_name: True,
+            select_runtime_budget=lambda message: {
+                "complexity": "medium",
+                "hardware_profile": "test",
+                "n_predict": 128,
+                "max_steps": max_steps,
+                "completion_timeout": 30,
+            },
             format_actor_prompt=fake_prompt_builder,
             make_response=fake_make_response,
-            max_steps=max_steps,
         )
 
     def test_low_risk_tool_bypasses_critic(self):
@@ -55,12 +61,18 @@ class AgentRuntimeTests(unittest.TestCase):
             available_tools={"web_search": lambda query: {"summary": query}},
             validate_tool_call=lambda tools, tool_name, args, message: (True, args, None),
             repair_and_alias_json=fake_repair_and_alias_json,
-            request_completion=lambda prompt: FakeResponse('{"tool":"web_search","args":{"query":"termux"}}'),
+            request_completion=lambda prompt, **kwargs: FakeResponse('{"tool":"web_search","args":{"query":"termux"}}'),
             verify_with_critic=lambda proposal: calls.append(proposal) or True,
             requires_critic_review=lambda tool_name: False,
+            select_runtime_budget=lambda message: {
+                "complexity": "medium",
+                "hardware_profile": "test",
+                "n_predict": 128,
+                "max_steps": 1,
+                "completion_timeout": 30,
+            },
             format_actor_prompt=fake_prompt_builder,
             make_response=fake_make_response,
-            max_steps=1,
         )
 
         payload = runtime.run(
@@ -75,8 +87,48 @@ class AgentRuntimeTests(unittest.TestCase):
         critic_entries = [item for item in payload["trace"] if item.get("type") == "critic"]
         self.assertEqual(critic_entries[0]["status"], "bypassed")
 
+    def test_runtime_budget_is_applied_to_request_completion(self):
+        seen = {}
+
+        def request_completion(prompt, *, n_predict, timeout):
+            seen["n_predict"] = n_predict
+            seen["timeout"] = timeout
+            return FakeResponse("Direct answer.")
+
+        runtime = AgentRuntime(
+            available_tools={},
+            validate_tool_call=lambda tools, tool_name, args, message: (True, args, None),
+            repair_and_alias_json=fake_repair_and_alias_json,
+            request_completion=request_completion,
+            verify_with_critic=lambda proposal: True,
+            requires_critic_review=lambda tool_name: True,
+            select_runtime_budget=lambda message: {
+                "complexity": "simple",
+                "hardware_profile": "high",
+                "n_predict": 96,
+                "max_steps": 2,
+                "completion_timeout": 45,
+            },
+            format_actor_prompt=fake_prompt_builder,
+            make_response=fake_make_response,
+        )
+
+        payload = runtime.run(
+            message="what is 2 plus 2?",
+            history=[],
+            trace=[{"type": "request", "message": "what is 2 plus 2?"}],
+            request_id="req5",
+            request_started_at=time.time(),
+        )
+
+        self.assertEqual(payload["response"], "Direct answer.")
+        self.assertEqual(seen["n_predict"], 96)
+        self.assertEqual(seen["timeout"], 45)
+        budget_entries = [item for item in payload["trace"] if item.get("type") == "runtime_budget"]
+        self.assertEqual(budget_entries[0]["complexity"], "simple")
+
     def test_direct_answer_reaches_answer_terminal_state(self):
-        runtime = self.make_runtime(lambda prompt: FakeResponse("Final direct answer."))
+        runtime = self.make_runtime(lambda prompt, **kwargs: FakeResponse("Final direct answer."))
 
         payload = runtime.run(
             message="hello",
@@ -92,7 +144,7 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(transitions[-1]["to_state"], "ANSWER")
 
     def test_http_error_reaches_terminal_error_state(self):
-        runtime = self.make_runtime(lambda prompt: FakeResponse("", status_code=503))
+        runtime = self.make_runtime(lambda prompt, **kwargs: FakeResponse("", status_code=503))
 
         payload = runtime.run(
             message="hello",
@@ -112,7 +164,7 @@ class AgentRuntimeTests(unittest.TestCase):
             FakeResponse('{"tool":"lookup","args":{"query":"android"}}'),
         ])
         runtime = self.make_runtime(
-            lambda prompt: next(responses),
+            lambda prompt, **kwargs: next(responses),
             available_tools={"lookup": lambda query: {"summary": query}},
             max_steps=2,
         )
