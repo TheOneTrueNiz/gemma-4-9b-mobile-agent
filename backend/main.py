@@ -34,6 +34,14 @@ from backend.agent_runtime import (
 from backend.router import router
 from backend.safety import validate_tool_call
 from backend.memory_policy import assess_memory_candidate
+from backend.memory_retrieval import (
+    DEFAULT_RECALL_LIMIT,
+    PROMPT_RECALL_LIMIT,
+    extract_recall_terms,
+    format_recall_results,
+    rank_recall_results,
+    recall_results,
+)
 
 # --- SMOLCLAW PATTERN: ARGUMENT ALIASING & REPAIR ---
 ARG_ALIASES = {
@@ -98,51 +106,10 @@ def remember_tool(fact, wing="World", floor="General"):
         f"({decision['memory_type']}): {decision['fact']}"
     )
 
-def extract_recall_terms(query):
-    base = (query or "").strip()
-    terms = []
-    if base:
-        terms.append(base)
-    token_candidates = re.findall(r"[A-Za-z0-9_'-]+", base.lower())
-    seen = {base.lower()} if base else set()
-    for token in token_candidates:
-        if len(token) < 4 or token in seen:
-            continue
-        seen.add(token)
-        terms.append(token)
-        if len(terms) >= 5:
-            break
-    return terms
-
-
-def rank_recall_results(query, results):
-    lowered = (query or "").lower()
-    ranked = []
-    for wing, floor, content, timestamp in results:
-        haystack = f"{wing} {floor} {content}".lower()
-        score = 0
-        for term in extract_recall_terms(query):
-            term_lower = term.lower()
-            if term_lower and term_lower in haystack:
-                score += 3 if " " in term_lower else 1
-        ranked.append((score, timestamp, wing, floor, content))
-    ranked.sort(key=lambda item: (-item[0], item[1]), reverse=False)
-    return [(wing, floor, content, timestamp) for score, timestamp, wing, floor, content in ranked if score > 0] or results
-
-def recall_tool(query):
+def recall_tool(query, limit=DEFAULT_RECALL_LIMIT):
     """Searches the hierarchical memory for relevant information."""
-    combined = []
-    seen = set()
-    for term in extract_recall_terms(query):
-        for item in memory.recall(term):
-            key = tuple(item)
-            if key in seen:
-                continue
-            seen.add(key)
-            combined.append(item)
-    results = rank_recall_results(query, combined)
-    if not results: return "No relevant memories found."
-    return "\n".join([f"[{w} > {f}] {c}" for w, f, c, t in results])
+    results = recall_results(memory, query)
+    return format_recall_results(results, limit=limit)
 
 AVAILABLE_TOOLS["remember"] = remember_tool
 AVAILABLE_TOOLS["recall"] = recall_tool
@@ -295,7 +262,7 @@ def make_response(response, trace=None, mode="agentic", request_id=None, request
 
 def format_actor_prompt(message, history):
     # Fetch relevant memories from MemSpire
-    relevant_memories = recall_tool(message)
+    relevant_memories = recall_tool(message, limit=PROMPT_RECALL_LIMIT)
     mem_str = relevant_memories if "No relevant memories" not in relevant_memories else ""
 
     tools_info = []
