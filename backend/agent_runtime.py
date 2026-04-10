@@ -2,6 +2,18 @@ import json
 import time
 
 
+def user_safe_blocked_message(reason=None):
+    text = (reason or "").strip()
+    lowered = text.lower()
+    if "path not allowed" in lowered:
+        return "I can't access that path. Try a location inside your home or storage directories."
+    if "sms" in lowered:
+        return "I can't send a text message unless you explicitly ask me to send one."
+    if "url" in lowered:
+        return "I can't open that link as requested. Try a standard http or https URL."
+    return "I can't do that request safely. Try a safer or more specific alternative."
+
+
 def append_tool_feedback(prompt, assistant_content, tool_result, *, blocked=False, rejected=False):
     prompt += f"{assistant_content}\nTool Result: {json.dumps(tool_result)}\n"
     if blocked:
@@ -115,6 +127,11 @@ def looks_like_tool_call(content):
 
 def finalize_user_answer(content, *, stalled=False):
     cleaned = clean_final_answer(content)
+    if cleaned.startswith("Blocked tool call:"):
+        reason = cleaned.split(":", 1)[1].strip() if ":" in cleaned else ""
+        return user_safe_blocked_message(reason)
+    if cleaned.startswith("Blocked repeated tool call:"):
+        return "I couldn't complete that tool workflow cleanly. Please try again with a narrower request."
     if looks_like_tool_call(cleaned):
         if stalled:
             return "I couldn't complete that tool workflow cleanly. Please try again with a narrower request."

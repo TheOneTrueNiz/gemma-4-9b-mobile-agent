@@ -51,6 +51,10 @@ class AgentRuntimeTests(unittest.TestCase):
         content = '{"tool":"web_search","args":{"query":"2 plus 2"}}'
         self.assertIn("couldn't complete", finalize_user_answer(content, stalled=True))
 
+    def test_finalize_user_answer_rewrites_blocked_policy_message(self):
+        content = "Blocked tool call: Path not allowed: /etc"
+        self.assertIn("can't access that path", finalize_user_answer(content, stalled=False))
+
     def make_runtime(self, request_completion, *, available_tools=None, verify_with_critic=None, validate_tool_call=None, max_steps=3):
         return AgentRuntime(
             available_tools=available_tools or {},

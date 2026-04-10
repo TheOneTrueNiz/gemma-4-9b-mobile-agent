@@ -19,6 +19,20 @@ FAST_PATH_FAMILIES = {
 }
 
 
+def user_safe_blocked_message(reason=None):
+    text = (reason or "").strip()
+    lowered = text.lower()
+    if "path not allowed" in lowered:
+        return "I can't access that path. Try a location inside your home or storage directories."
+    if "brightness" in lowered:
+        return "I can't set brightness with that value. Use a level between 0 and 255."
+    if "http and https" in lowered or "url" in lowered:
+        return "I can't open that link as requested. Try a standard http or https URL."
+    if "search query cannot be empty" in lowered:
+        return "I need a search query before I can search the web."
+    return "I can't do that request safely. Try a safer or more specific alternative."
+
+
 class FastPathRouter:
     def __init__(self):
         # Define patterns and their associated tools/actions
@@ -297,7 +311,7 @@ class FastPathRouter:
         family = FAST_PATH_FAMILIES.get(tool_name, "device")
         if not allowed:
             return {
-                "response": f"Blocked tool call: {reason}",
+                "response": user_safe_blocked_message(reason),
                 "trace": [{
                     "type": "fast_path_tool",
                     "route": route or tool_name,

@@ -292,6 +292,7 @@
             const [status, setStatus] = useState({ actor_online: false, actor_model: "Checking..." });
             const [showTrace, setShowTrace] = useState(true);
             const [traceFilter, setTraceFilter] = useState("all");
+            const [drawers, setDrawers] = useState({ status: true, actions: false, debug: false });
             const chatEndRef = useRef(null);
 
             useEffect(() => {
@@ -397,6 +398,10 @@
                 });
             };
 
+            const toggleDrawer = (key) => {
+                setDrawers(prev => ({ ...prev, [key]: !prev[key] }));
+            };
+
             const lastMessage = messages[messages.length - 1];
 
             return (
@@ -414,57 +419,41 @@
                                         Local agent shell for phone control, deterministic utilities, memory, and traced execution.
                                     </p>
                                 </div>
-                                <div className="glass-strong rounded-[26px] px-4 py-3 text-right">
-                                    <div className="mono text-[10px] uppercase tracking-[0.24em] text-cyan-200">Engine</div>
-                                    <div className="mt-2 text-sm font-semibold text-white">{status.actor_model}</div>
-                                    <div className="mt-3 h-px w-full bg-cyan-300/15"></div>
+                                <button
+                                    onClick={() => toggleDrawer("status")}
+                                    className="glass-strong rounded-[22px] px-4 py-3 text-right"
+                                >
+                                    <div className="mono text-[10px] uppercase tracking-[0.24em] text-cyan-200">Status Drawer</div>
+                                    <div className="mt-2 text-sm font-semibold text-white">{drawers.status ? "Open" : "Closed"}</div>
                                     <div className="mt-3 mono text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                                        {showTrace ? "Trace Visible" : "Trace Hidden"}
+                                        {status.actor_model}
                                     </div>
-                                </div>
+                                </button>
                             </div>
 
-                            <div className="hero-grid mt-4">
-                                <div className="glass-strong rounded-[24px] p-4 stagger-2">
-                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Mission Feed</div>
-                                    <div className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white">
-                                        {lastMessage?.mode === "pending" ? "Running request" : "Ready for next task"}
+                            {drawers.status && (
+                                <div className="hero-grid mt-4">
+                                    <div className="glass-strong rounded-[24px] p-4 stagger-2">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Mission Feed</div>
+                                        <div className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white">
+                                            {lastMessage?.mode === "pending" ? "Running request" : "Ready for next task"}
+                                        </div>
+                                        <div className="mt-2 text-sm leading-6 text-slate-300">
+                                            {loading ? "The runtime is processing the current turn." : "Fast paths, deterministic tools, and agentic traces are live."}
+                                        </div>
                                     </div>
-                                    <div className="mt-2 text-sm leading-6 text-slate-300">
-                                        {loading ? "The runtime is processing the current turn." : "Fast paths, deterministic tools, and agentic traces are live."}
-                                    </div>
-                                </div>
-                                <div className="glass-strong rounded-[24px] p-4 stagger-3">
-                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Operator Deck</div>
-                                    <div className="mt-3 flex items-center justify-between gap-3">
-                                        <button
-                                            onClick={() => setShowTrace(prev => !prev)}
-                                            className="chip mono text-[10px] text-white"
-                                        >
-                                            {showTrace ? "Hide Debug" : "Show Debug"}
-                                        </button>
-                                        <select
-                                            value={traceFilter}
-                                            onChange={(e) => setTraceFilter(e.target.value)}
-                                            className="mono rounded-full border border-cyan-300/20 bg-slate-950/60 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-slate-200 outline-none"
-                                        >
-                                            <option value="all">All</option>
-                                            <option value="request">Request</option>
-                                            <option value="fast_path_tool">Fast Path</option>
-                                            <option value="fast_path_search">Fast Search</option>
-                                            <option value="state_transition">State</option>
-                                            <option value="runtime_budget">Budget</option>
-                                            <option value="actor">Actor</option>
-                                            <option value="tool_parse">Tool Parse</option>
-                                            <option value="critic">Critic</option>
-                                            <option value="tool_execution">Tool Exec</option>
-                                            <option value="direct_fallback">Fallback</option>
-                                            <option value="answer_cleanup">Cleanup</option>
-                                            <option value="exception">Exception</option>
-                                        </select>
+                                    <div className="glass-strong rounded-[24px] p-4 stagger-3">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Engine Deck</div>
+                                        <div className="mt-3 text-base font-bold text-white">{status.actor_model}</div>
+                                        <div className="mt-2 mono text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                                            {showTrace ? "Trace Visible" : "Trace Hidden"}
+                                        </div>
+                                        <div className="mt-3 chip mono text-[10px] text-white">
+                                            {status.actor_online ? "Local Runtime Ready" : "Engine Offline"}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </section>
 
                         <section className="glass-panel rounded-[28px] p-4 stagger-2">
@@ -473,21 +462,72 @@
                                     <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Quick Launch</div>
                                     <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Command Deck</div>
                                 </div>
-                                <div className="mono text-[11px] uppercase tracking-[0.16em] text-slate-400">Tap to dispatch</div>
+                                <button
+                                    onClick={() => toggleDrawer("actions")}
+                                    className="chip mono text-[10px] text-white"
+                                >
+                                    {drawers.actions ? "Hide Drawer" : "Open Drawer"}
+                                </button>
                             </div>
-                            <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-                                {quickActions.map((action, i) => (
+                            {drawers.actions && (
+                                <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+                                    {quickActions.map((action, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => sendMessage(action.cmd)}
+                                            className="action-card"
+                                        >
+                                            <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
+                                            <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
+                                            <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+
+                        <section className="glass-panel rounded-[28px] p-4 stagger-2">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Operator Controls</div>
+                                    <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Debug Drawer</div>
+                                </div>
+                                <button
+                                    onClick={() => toggleDrawer("debug")}
+                                    className="chip mono text-[10px] text-white"
+                                >
+                                    {drawers.debug ? "Hide Drawer" : "Open Drawer"}
+                                </button>
+                            </div>
+                            {drawers.debug && (
+                                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <button
-                                        key={i}
-                                        onClick={() => sendMessage(action.cmd)}
-                                        className="action-card"
+                                        onClick={() => setShowTrace(prev => !prev)}
+                                        className="chip mono text-[10px] text-white justify-center"
                                     >
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
-                                        <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
-                                        <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
+                                        {showTrace ? "Hide Debug" : "Show Debug"}
                                     </button>
-                                ))}
-                            </div>
+                                    <select
+                                        value={traceFilter}
+                                        onChange={(e) => setTraceFilter(e.target.value)}
+                                        className="mono rounded-full border border-cyan-300/20 bg-slate-950/60 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-slate-200 outline-none"
+                                    >
+                                        <option value="all">All</option>
+                                        <option value="request">Request</option>
+                                        <option value="fast_path_tool">Fast Path</option>
+                                        <option value="fast_path_search">Fast Search</option>
+                                        <option value="state_transition">State</option>
+                                        <option value="runtime_budget">Budget</option>
+                                        <option value="actor">Actor</option>
+                                        <option value="tool_parse">Tool Parse</option>
+                                        <option value="critic">Critic</option>
+                                        <option value="tool_execution">Tool Exec</option>
+                                        <option value="direct_fallback">Fallback</option>
+                                        <option value="answer_cleanup">Cleanup</option>
+                                        <option value="exception">Exception</option>
+                                    </select>
+                                </div>
+                            )}
                         </section>
 
                         <section className="glass-panel rounded-[28px] p-4 stagger-3">
