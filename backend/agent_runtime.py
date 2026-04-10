@@ -40,6 +40,88 @@ def trace_state_transition(trace, from_state, to_state, reason, *, step=None):
     return to_state
 
 
+def extract_tool_json_candidate(content):
+    start = content.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(content)):
+        char = content[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return content[start:index + 1]
+    return content[start:].strip()
+
+
+def clean_final_answer(content):
+    text = (content or "").strip()
+    if not text:
+        return text
+
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        upper = stripped.upper()
+        if not stripped:
+            if lines and lines[-1]:
+                lines.append("")
+            continue
+        if stripped.startswith("Tool Result:"):
+            continue
+        if upper.startswith("SYSTEM:"):
+            continue
+        if upper.startswith("FINAL NOTE:"):
+            continue
+        lines.append(stripped)
+
+    cleaned = "\n".join(line for line in lines if line != "" or len(lines) == 1).strip()
+    if cleaned.startswith('"') and cleaned.endswith('"'):
+        try:
+            unwrapped = json.loads(cleaned)
+            if isinstance(unwrapped, str):
+                cleaned = unwrapped.strip()
+        except Exception:
+            pass
+    return cleaned or text
+
+
+def looks_like_tool_call(content):
+    text = (content or "").strip()
+    if not text.startswith("{"):
+        return False
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return False
+    return isinstance(parsed, dict) and isinstance(parsed.get("tool"), str)
+
+
+def finalize_user_answer(content, *, stalled=False):
+    cleaned = clean_final_answer(content)
+    if looks_like_tool_call(cleaned):
+        if stalled:
+            return "I couldn't complete that tool workflow cleanly. Please try again with a narrower request."
+        return "I couldn't turn that into a clean final answer. Please try again."
+    return cleaned
+
+
 class AgentRuntime:
     def __init__(
         self,
@@ -124,9 +206,7 @@ class AgentRuntime:
 
             if "{" in content:
                 state = trace_state_transition(trace, state, "TOOL_PARSE", "json_candidate_detected", step=step_number)
-                start = content.find("{")
-                end = content.rfind("}") + 1 if "}" in content else len(content)
-                tool_json_raw = content[start:end]
+                tool_json_raw = extract_tool_json_candidate(content)
                 tool_call = self.repair_and_alias_json(tool_json_raw)
                 trace.append({
                     "type": "tool_parse",
@@ -234,16 +314,30 @@ class AgentRuntime:
                     continue
 
             trace_state_transition(trace, state, "ANSWER", "direct_response", step=step_number)
+            cleaned_content = finalize_user_answer(content, stalled=False)
+            trace.append({
+                "type": "answer_cleanup",
+                "step": step_number,
+                "changed": cleaned_content != content,
+                "cleaned_preview": cleaned_content[:240],
+            })
             return self.make_response(
-                content,
+                cleaned_content,
                 trace=trace,
                 request_id=request_id,
                 request_duration_ms=self._request_duration_ms(request_started_at),
             )
 
         trace_state_transition(trace, state, "STALLED", "max_steps_reached", step=runtime_budget["max_steps"])
+        cleaned_last_content = finalize_user_answer(last_content, stalled=True)
+        trace.append({
+            "type": "answer_cleanup",
+            "step": runtime_budget["max_steps"],
+            "changed": cleaned_last_content != last_content,
+            "cleaned_preview": cleaned_last_content[:240],
+        })
         return self.make_response(
-            last_content,
+            cleaned_last_content,
             trace=trace,
             request_id=request_id,
             request_duration_ms=self._request_duration_ms(request_started_at),

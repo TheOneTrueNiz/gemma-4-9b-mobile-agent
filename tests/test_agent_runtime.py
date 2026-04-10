@@ -2,7 +2,7 @@ import json
 import time
 import unittest
 
-from backend.agent_runtime import AgentRuntime
+from backend.agent_runtime import AgentRuntime, clean_final_answer, extract_tool_json_candidate, finalize_user_answer
 
 
 class FakeResponse:
@@ -36,6 +36,21 @@ def fake_prompt_builder(message, history):
 
 
 class AgentRuntimeTests(unittest.TestCase):
+    def test_extract_tool_json_candidate_stops_at_first_balanced_object(self):
+        raw = '{"tool":"web_search","args":{"query":"termux"}}\nTool Result: {"snippet":"ok"}'
+        self.assertEqual(
+            extract_tool_json_candidate(raw),
+            '{"tool":"web_search","args":{"query":"termux"}}',
+        )
+
+    def test_clean_final_answer_strips_protocol_residue(self):
+        content = '"4"\n\nTool Result: {"time":"2023-10-27 10:00:00"}\nFINAL NOTE: answer directly.'
+        self.assertEqual(clean_final_answer(content), "4")
+
+    def test_finalize_user_answer_replaces_stalled_tool_json(self):
+        content = '{"tool":"web_search","args":{"query":"2 plus 2"}}'
+        self.assertIn("couldn't complete", finalize_user_answer(content, stalled=True))
+
     def make_runtime(self, request_completion, *, available_tools=None, verify_with_critic=None, validate_tool_call=None, max_steps=3):
         return AgentRuntime(
             available_tools=available_tools or {},
@@ -142,6 +157,25 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertIsInstance(payload["request_duration_ms"], int)
         transitions = [item for item in payload["trace"] if item.get("type") == "state_transition"]
         self.assertEqual(transitions[-1]["to_state"], "ANSWER")
+        cleanup_entries = [item for item in payload["trace"] if item.get("type") == "answer_cleanup"]
+        self.assertEqual(cleanup_entries[0]["changed"], False)
+
+    def test_mixed_tool_and_answer_content_recovers_clean_final_answer(self):
+        runtime = self.make_runtime(
+            lambda prompt, **kwargs: FakeResponse('"4"\n\nFINAL NOTE: If you need a tool, respond with valid raw JSON only.')
+        )
+
+        payload = runtime.run(
+            message="what is 2 plus 2?",
+            history=[],
+            trace=[{"type": "request", "message": "what is 2 plus 2?"}],
+            request_id="req6",
+            request_started_at=time.time(),
+        )
+
+        self.assertEqual(payload["response"], "4")
+        cleanup_entries = [item for item in payload["trace"] if item.get("type") == "answer_cleanup"]
+        self.assertEqual(cleanup_entries[0]["changed"], True)
 
     def test_http_error_reaches_terminal_error_state(self):
         runtime = self.make_runtime(lambda prompt, **kwargs: FakeResponse("", status_code=503))
@@ -177,7 +211,7 @@ class AgentRuntimeTests(unittest.TestCase):
             request_started_at=time.time(),
         )
 
-        self.assertEqual(payload["response"], '{"tool":"lookup","args":{"query":"android"}}')
+        self.assertIn("couldn't complete", payload["response"])
         transitions = [item for item in payload["trace"] if item.get("type") == "state_transition"]
         self.assertEqual(transitions[-1]["to_state"], "STALLED")
         tool_exec = [item for item in payload["trace"] if item.get("type") == "tool_execution"]

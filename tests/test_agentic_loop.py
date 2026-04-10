@@ -69,7 +69,7 @@ class AgenticLoopTests(unittest.TestCase):
     @patch("backend.main.requests.post")
     def test_successful_tool_then_final_answer(self, mock_post, _mock_critic, _mock_recall, _mock_route, _mock_engine):
         mock_post.side_effect = [
-            FakeResponse('{"tool":"web_search","args":{"query":"llama.cpp android"}}'),
+            FakeResponse('{"tool":"web_search","args":{"query":"llama.cpp android"}}\nTool Result: {"summary":"cached"}'),
             FakeResponse("Here is the answer based on the tool result."),
         ]
 
