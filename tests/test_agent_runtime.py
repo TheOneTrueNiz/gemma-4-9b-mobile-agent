@@ -1,0 +1,109 @@
+import json
+import time
+import unittest
+
+from backend.agent_runtime import AgentRuntime
+
+
+class FakeResponse:
+    def __init__(self, content, status_code=200):
+        self.status_code = status_code
+        self._content = content
+
+    def json(self):
+        return {"content": self._content}
+
+
+def fake_make_response(response, trace=None, mode="agentic", request_id=None, request_duration_ms=None):
+    return {
+        "response": response,
+        "trace": trace or [],
+        "mode": mode,
+        "request_id": request_id,
+        "request_duration_ms": request_duration_ms,
+    }
+
+
+def fake_repair_and_alias_json(raw):
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def fake_prompt_builder(message, history):
+    return f"User: {message}\nAssistant:"
+
+
+class AgentRuntimeTests(unittest.TestCase):
+    def make_runtime(self, request_completion, *, available_tools=None, verify_with_critic=None, validate_tool_call=None, max_steps=3):
+        return AgentRuntime(
+            available_tools=available_tools or {},
+            validate_tool_call=validate_tool_call or (lambda tools, tool_name, args, message: (True, args, None)),
+            repair_and_alias_json=fake_repair_and_alias_json,
+            request_completion=request_completion,
+            verify_with_critic=verify_with_critic or (lambda proposal: True),
+            format_actor_prompt=fake_prompt_builder,
+            make_response=fake_make_response,
+            max_steps=max_steps,
+        )
+
+    def test_direct_answer_reaches_answer_terminal_state(self):
+        runtime = self.make_runtime(lambda prompt: FakeResponse("Final direct answer."))
+
+        payload = runtime.run(
+            message="hello",
+            history=[],
+            trace=[{"type": "request", "message": "hello"}],
+            request_id="req1",
+            request_started_at=time.time(),
+        )
+
+        self.assertEqual(payload["response"], "Final direct answer.")
+        self.assertIsInstance(payload["request_duration_ms"], int)
+        transitions = [item for item in payload["trace"] if item.get("type") == "state_transition"]
+        self.assertEqual(transitions[-1]["to_state"], "ANSWER")
+
+    def test_http_error_reaches_terminal_error_state(self):
+        runtime = self.make_runtime(lambda prompt: FakeResponse("", status_code=503))
+
+        payload = runtime.run(
+            message="hello",
+            history=[],
+            trace=[{"type": "request", "message": "hello"}],
+            request_id="req2",
+            request_started_at=time.time(),
+        )
+
+        self.assertIn("Actor engine returned 503", payload["response"])
+        transitions = [item for item in payload["trace"] if item.get("type") == "state_transition"]
+        self.assertEqual(transitions[-1]["to_state"], "TERMINAL_ERROR")
+
+    def test_repeated_tool_results_can_stall_cleanly(self):
+        responses = iter([
+            FakeResponse('{"tool":"lookup","args":{"query":"termux"}}'),
+            FakeResponse('{"tool":"lookup","args":{"query":"android"}}'),
+        ])
+        runtime = self.make_runtime(
+            lambda prompt: next(responses),
+            available_tools={"lookup": lambda query: {"summary": query}},
+            max_steps=2,
+        )
+
+        payload = runtime.run(
+            message="research termux",
+            history=[],
+            trace=[{"type": "request", "message": "research termux"}],
+            request_id="req3",
+            request_started_at=time.time(),
+        )
+
+        self.assertEqual(payload["response"], '{"tool":"lookup","args":{"query":"android"}}')
+        transitions = [item for item in payload["trace"] if item.get("type") == "state_transition"]
+        self.assertEqual(transitions[-1]["to_state"], "STALLED")
+        tool_exec = [item for item in payload["trace"] if item.get("type") == "tool_execution"]
+        self.assertEqual(len(tool_exec), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
