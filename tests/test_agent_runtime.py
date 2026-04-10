@@ -43,10 +43,37 @@ class AgentRuntimeTests(unittest.TestCase):
             repair_and_alias_json=fake_repair_and_alias_json,
             request_completion=request_completion,
             verify_with_critic=verify_with_critic or (lambda proposal: True),
+            requires_critic_review=lambda tool_name: True,
             format_actor_prompt=fake_prompt_builder,
             make_response=fake_make_response,
             max_steps=max_steps,
         )
+
+    def test_low_risk_tool_bypasses_critic(self):
+        calls = []
+        runtime = AgentRuntime(
+            available_tools={"web_search": lambda query: {"summary": query}},
+            validate_tool_call=lambda tools, tool_name, args, message: (True, args, None),
+            repair_and_alias_json=fake_repair_and_alias_json,
+            request_completion=lambda prompt: FakeResponse('{"tool":"web_search","args":{"query":"termux"}}'),
+            verify_with_critic=lambda proposal: calls.append(proposal) or True,
+            requires_critic_review=lambda tool_name: False,
+            format_actor_prompt=fake_prompt_builder,
+            make_response=fake_make_response,
+            max_steps=1,
+        )
+
+        payload = runtime.run(
+            message="search termux",
+            history=[],
+            trace=[{"type": "request", "message": "search termux"}],
+            request_id="req4",
+            request_started_at=time.time(),
+        )
+
+        self.assertEqual(calls, [])
+        critic_entries = [item for item in payload["trace"] if item.get("type") == "critic"]
+        self.assertEqual(critic_entries[0]["status"], "bypassed")
 
     def test_direct_answer_reaches_answer_terminal_state(self):
         runtime = self.make_runtime(lambda prompt: FakeResponse("Final direct answer."))

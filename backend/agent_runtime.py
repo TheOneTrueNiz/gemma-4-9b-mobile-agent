@@ -49,6 +49,7 @@ class AgentRuntime:
         repair_and_alias_json,
         request_completion,
         verify_with_critic,
+        requires_critic_review,
         format_actor_prompt,
         make_response,
         max_steps=3,
@@ -58,6 +59,7 @@ class AgentRuntime:
         self.repair_and_alias_json = repair_and_alias_json
         self.request_completion = request_completion
         self.verify_with_critic = verify_with_critic
+        self.requires_critic_review = requires_critic_review
         self.format_actor_prompt = format_actor_prompt
         self.make_response = make_response
         self.max_steps = max_steps
@@ -131,28 +133,36 @@ class AgentRuntime:
                     last_content = content
                     continue
 
-                state = trace_state_transition(trace, state, "CRITIC_REVIEW", "tool_call_parsed", step=step_number)
-                if not self.verify_with_critic(json.dumps(tool_call)):
+                tool_name = tool_call.get("tool")
+                args = tool_call.get("args", {})
+                if self.requires_critic_review(tool_name):
+                    state = trace_state_transition(trace, state, "CRITIC_REVIEW", "tool_call_parsed", step=step_number)
+                    if not self.verify_with_critic(json.dumps(tool_call)):
+                        trace.append({
+                            "type": "critic",
+                            "step": step_number,
+                            "status": "rejected",
+                            "proposal": tool_call,
+                        })
+                        rejection = "Critic rejected tool call."
+                        state = trace_state_transition(trace, state, "ACTOR_THINK", "critic_rejected", step=step_number)
+                        current_prompt = append_tool_feedback(current_prompt, content, rejection, rejected=True)
+                        last_content = rejection
+                        continue
+
                     trace.append({
                         "type": "critic",
                         "step": step_number,
-                        "status": "rejected",
-                        "proposal": tool_call,
+                        "status": "approved",
                     })
-                    rejection = "Critic rejected tool call."
-                    state = trace_state_transition(trace, state, "ACTOR_THINK", "critic_rejected", step=step_number)
-                    current_prompt = append_tool_feedback(current_prompt, content, rejection, rejected=True)
-                    last_content = rejection
-                    continue
-
-                trace.append({
-                    "type": "critic",
-                    "step": step_number,
-                    "status": "approved",
-                })
+                else:
+                    trace.append({
+                        "type": "critic",
+                        "step": step_number,
+                        "status": "bypassed",
+                        "reason": "low_risk_tool",
+                    })
                 state = trace_state_transition(trace, state, "TOOL_VALIDATE", "critic_approved", step=step_number)
-                tool_name = tool_call.get("tool")
-                args = tool_call.get("args", {})
                 is_valid, args, validation_error = self.validate_tool_call(
                     self.available_tools,
                     tool_name,

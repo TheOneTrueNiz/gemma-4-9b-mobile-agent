@@ -42,6 +42,7 @@ from backend.memory_retrieval import (
     rank_recall_results,
     recall_results,
 )
+from backend.tool_policy import requires_critic_review, select_relevant_tools
 
 # --- SMOLCLAW PATTERN: ARGUMENT ALIASING & REPAIR ---
 ARG_ALIASES = {
@@ -265,8 +266,9 @@ def format_actor_prompt(message, history):
     relevant_memories = recall_tool(message, limit=PROMPT_RECALL_LIMIT)
     mem_str = relevant_memories if "No relevant memories" not in relevant_memories else ""
 
+    relevant_tools = select_relevant_tools(message, AVAILABLE_TOOLS)
     tools_info = []
-    for name, func in AVAILABLE_TOOLS.items():
+    for name, func in relevant_tools.items():
         import inspect
         sig = inspect.signature(func)
         args_str = ", ".join(sig.parameters.keys())
@@ -362,6 +364,7 @@ async def chat(request: ChatRequest):
         repair_and_alias_json=repair_and_alias_json,
         request_completion=request_actor_completion,
         verify_with_critic=verify_with_critic,
+        requires_critic_review=requires_critic_review,
         format_actor_prompt=format_actor_prompt,
         make_response=make_response,
     )
