@@ -9,6 +9,16 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from tools.phone_tools import AVAILABLE_TOOLS, format_conversion_value
 from backend.safety import validate_tool_call
 
+
+FAST_PATH_FAMILIES = {
+    "calculate": "math",
+    "date_time_reason": "time",
+    "convert_units": "conversion",
+    "text_utility": "utility",
+    "web_search": "search",
+}
+
+
 class FastPathRouter:
     def __init__(self):
         # Define patterns and their associated tools/actions
@@ -284,12 +294,15 @@ class FastPathRouter:
     def execute_tool(self, tool_name, args, user_message, formatter=None, route=None):
         started_at = time.time()
         allowed, normalized_args, reason = validate_tool_call(AVAILABLE_TOOLS, tool_name, args, user_message)
+        family = FAST_PATH_FAMILIES.get(tool_name, "device")
         if not allowed:
             return {
                 "response": f"Blocked tool call: {reason}",
                 "trace": [{
                     "type": "fast_path_tool",
                     "route": route or tool_name,
+                    "family": family,
+                    "deterministic": family in {"math", "time", "conversion", "utility"},
                     "tool": tool_name,
                     "args": normalized_args,
                     "status": "blocked",
@@ -304,6 +317,8 @@ class FastPathRouter:
             "trace": [{
                 "type": "fast_path_tool",
                 "route": route or tool_name,
+                "family": family,
+                "deterministic": family in {"math", "time", "conversion", "utility"},
                 "tool": tool_name,
                 "args": normalized_args,
                 "status": "ok",

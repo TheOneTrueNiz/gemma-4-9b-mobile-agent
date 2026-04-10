@@ -105,6 +105,16 @@
                 return trace.filter(item => item.type === traceFilter);
             };
 
+            const getTraceMeta = (message) => {
+                const trace = message.trace || [];
+                const firstOperational = trace.find(item => item.type !== "request") || null;
+                return {
+                    route: firstOperational?.route || firstOperational?.tool || message.mode || "agentic",
+                    family: firstOperational?.family || (firstOperational?.type === "fast_path_search" ? "search" : null),
+                    deterministic: Boolean(firstOperational?.deterministic),
+                };
+            };
+
             const toggleRawTrace = (index) => {
                 setMessages(prev => {
                     const updated = [...prev];
@@ -145,10 +155,15 @@
                                 <option value="all">All</option>
                                 <option value="request">Request</option>
                                 <option value="fast_path_tool">Fast Path</option>
+                                <option value="fast_path_search">Fast Search</option>
+                                <option value="state_transition">State</option>
+                                <option value="runtime_budget">Budget</option>
                                 <option value="actor">Actor</option>
                                 <option value="tool_parse">Tool Parse</option>
                                 <option value="critic">Critic</option>
                                 <option value="tool_execution">Tool Exec</option>
+                                <option value="direct_fallback">Fallback</option>
+                                <option value="answer_cleanup">Cleanup</option>
                                 <option value="exception">Exception</option>
                             </select>
                             <button
@@ -176,6 +191,24 @@
                                         <div className="mb-2 flex items-center justify-between gap-2">
                                             <div>
                                                 <div className="font-semibold uppercase tracking-wide text-amber-700">Trace Summary</div>
+                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                    <span className="rounded-full bg-white px-2.5 py-1 font-bold uppercase tracking-wide text-[10px] text-slate-700 border border-amber-200">
+                                                        Mode: {m.mode || "agentic"}
+                                                    </span>
+                                                    <span className="rounded-full bg-white px-2.5 py-1 font-bold uppercase tracking-wide text-[10px] text-slate-700 border border-amber-200">
+                                                        Route: {getTraceMeta(m).route}
+                                                    </span>
+                                                    {getTraceMeta(m).family && (
+                                                        <span className="rounded-full bg-white px-2.5 py-1 font-bold uppercase tracking-wide text-[10px] text-slate-700 border border-amber-200">
+                                                            Family: {getTraceMeta(m).family}
+                                                        </span>
+                                                    )}
+                                                    {getTraceMeta(m).deterministic && (
+                                                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-bold uppercase tracking-wide text-[10px] text-emerald-800 border border-emerald-200">
+                                                            Deterministic
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 {m.requestDurationMs !== null && (
                                                     <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
                                                         Request Duration: {m.requestDurationMs}ms

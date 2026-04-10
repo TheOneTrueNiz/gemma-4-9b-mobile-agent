@@ -229,9 +229,22 @@ def summarize_trace(trace):
             lines.append(
                 f"state: {item.get('from_state')} -> {item.get('to_state')} reason={item.get('reason', '')}"
             )
-        elif item_type in {"fast_path_tool", "tool_execution"}:
+        elif item_type == "runtime_budget":
             lines.append(
-                f"{item_type}: {item.get('tool')} status={item.get('status')} duration_ms={item.get('duration_ms', 'n/a')}"
+                "runtime_budget: "
+                f"profile={item.get('hardware_profile')} "
+                f"complexity={item.get('complexity')} "
+                f"steps={item.get('max_steps')} "
+                f"n_predict={item.get('n_predict')} "
+                f"timeout={item.get('completion_timeout')}"
+            )
+        elif item_type in {"fast_path_tool", "tool_execution"}:
+            route = item.get("route") or item.get("tool")
+            family = item.get("family")
+            deterministic = " deterministic" if item.get("deterministic") else ""
+            lines.append(
+                f"{item_type}: {route} tool={item.get('tool')} family={family or 'n/a'}"
+                f"{deterministic} status={item.get('status')} duration_ms={item.get('duration_ms', 'n/a')}"
             )
         elif item_type == "fast_path_search":
             lines.append(
@@ -244,6 +257,12 @@ def summarize_trace(trace):
         elif item_type == "tool_parse":
             parsed = item.get("parsed") or {}
             lines.append(f"tool_parse step {item.get('step')}: {parsed.get('tool', 'unknown')}")
+        elif item_type == "direct_fallback":
+            lines.append(
+                f"direct_fallback: reason={item.get('reason', '')} status={item.get('status', 'ok')}"
+            )
+        elif item_type == "answer_cleanup":
+            lines.append(f"answer_cleanup: source={item.get('source', 'unknown')}")
         elif item_type == "exception":
             lines.append(f"exception: {item.get('message', '')}")
         else:

@@ -17,6 +17,12 @@ class TraceResponseTests(unittest.TestCase):
         self.assertIn("trace", payload)
         self.assertEqual(payload["trace"][0]["status"], "blocked")
 
+    def test_deterministic_fast_path_exposes_family_metadata(self):
+        payload = router.route("count words in \"one two three\"")
+        self.assertEqual(payload["trace"][0]["type"], "fast_path_tool")
+        self.assertEqual(payload["trace"][0]["family"], "utility")
+        self.assertTrue(payload["trace"][0]["deterministic"])
+
 
 if __name__ == "__main__":
     unittest.main()
