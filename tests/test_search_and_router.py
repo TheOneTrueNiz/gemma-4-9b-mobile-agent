@@ -2,7 +2,9 @@ import unittest
 from unittest.mock import patch
 
 from backend.router import router
-from tools.phone_tools import calculate, extract_duckduckgo_html_results, web_search
+from datetime import datetime
+
+from tools.phone_tools import calculate, date_time_reason, extract_duckduckgo_html_results, web_search
 
 
 SAMPLE_HTML = """
@@ -32,6 +34,14 @@ class SearchAndRouterTests(unittest.TestCase):
     def test_calculate_rejects_unsafe_expression(self):
         with self.assertRaises(ValueError):
             calculate("__import__('os').system('id')")
+
+    def test_date_time_reason_handles_relative_weekday(self):
+        result = date_time_reason("what day is 10 days from now", now=datetime(2026, 4, 10, 12, 0, 0))
+        self.assertEqual(result, "2026-04-20 is a Monday")
+
+    def test_date_time_reason_handles_days_until(self):
+        result = date_time_reason("how many days until april 20 2026", now=datetime(2026, 4, 10, 12, 0, 0))
+        self.assertEqual(result, "10 days")
 
     def test_extract_duckduckgo_html_results(self):
         results = extract_duckduckgo_html_results(SAMPLE_HTML)
@@ -78,6 +88,16 @@ class SearchAndRouterTests(unittest.TestCase):
         response = router.route("what is 2 + 2 * 5?")
         self.assertIn("2 + 2 * 5 = 12", response["response"])
         self.assertEqual(response["trace"][0]["tool"], "calculate")
+
+    def test_router_routes_datetime_reasoning(self):
+        with patch.dict(
+            "backend.router.AVAILABLE_TOOLS",
+            {"date_time_reason": lambda query: "2026-04-20 is a Monday"},
+            clear=False,
+        ):
+            response = router.route("what day is 10 days from now")
+        self.assertEqual(response["trace"][0]["tool"], "date_time_reason")
+        self.assertIn("2026-04-20 is a Monday", response["response"])
 
 
 if __name__ == "__main__":

@@ -5,9 +5,11 @@ import glob
 import re
 import ast
 import operator
+import time
 import urllib.request
 import urllib.parse
 from html import unescape
+from datetime import datetime, timedelta, timezone, date
 
 import requests
 
@@ -29,6 +31,9 @@ SAFE_MATH_UNARY_OPERATORS = {
     ast.UAdd: operator.pos,
     ast.USub: operator.neg,
 }
+
+PROCESS_START_MONOTONIC = time.monotonic()
+MONTH_FORMATS = ("%B %d %Y", "%b %d %Y", "%B %d, %Y", "%b %d, %Y", "%B %d", "%b %d")
 
 def run_termux_command(command):
     try:
@@ -81,8 +86,37 @@ def toast(message):
 
 def get_time():
     """Returns the current date and time."""
-    from datetime import datetime
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_utc_time():
+    """Returns the current UTC date and time."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def format_duration(total_seconds):
+    total_seconds = int(total_seconds)
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours or parts:
+        parts.append(f"{hours}h")
+    if minutes or parts:
+        parts.append(f"{minutes}m")
+    parts.append(f"{seconds}s")
+    return " ".join(parts)
+
+
+def get_chronometer():
+    """Returns monotonic elapsed time since the agent process started."""
+    elapsed = time.monotonic() - PROCESS_START_MONOTONIC
+    return {
+        "elapsed_seconds": round(elapsed, 3),
+        "elapsed_human": format_duration(elapsed),
+    }
 
 
 def _eval_math_node(node):
@@ -108,6 +142,66 @@ def calculate(expression):
         raise ValueError("Expression contains unsupported characters")
     parsed = ast.parse(text, mode="eval")
     return _eval_math_node(parsed)
+
+
+def parse_reference_date(text, now=None):
+    now = now or datetime.now()
+    normalized = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", text.strip(), flags=re.I)
+    for fmt in MONTH_FORMATS:
+        try:
+            parsed = datetime.strptime(normalized, fmt)
+            if "%Y" not in fmt:
+                parsed = parsed.replace(year=now.year)
+            return parsed.date()
+        except ValueError:
+            continue
+    try:
+        return datetime.strptime(normalized, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def date_time_reason(query, now=None):
+    """Resolves deterministic date and time reasoning queries."""
+    now = now or datetime.now()
+    today = now.date()
+    text = (query or "").strip().lower()
+
+    if text in {"what time is it in utc", "current time in utc", "utc time"}:
+        return get_utc_time()
+
+    if text in {"how long have you been running", "chronometer", "elapsed time"}:
+        chrono = get_chronometer()
+        return f"Elapsed time: {chrono['elapsed_human']} ({chrono['elapsed_seconds']}s)"
+
+    match = re.fullmatch(r"what day is (\d+) days? from (now|today)", text)
+    if match:
+        delta_days = int(match.group(1))
+        target = today + timedelta(days=delta_days)
+        return f"{target.isoformat()} is a {target.strftime('%A')}"
+
+    match = re.fullmatch(r"what date is (\d+) days? from (now|today)", text)
+    if match:
+        delta_days = int(match.group(1))
+        target = today + timedelta(days=delta_days)
+        return target.isoformat()
+
+    match = re.fullmatch(r"how many days until (.+)", text)
+    if match:
+        target = parse_reference_date(match.group(1), now=now)
+        if not target:
+            raise ValueError("Unsupported date format")
+        delta = (target - today).days
+        return f"{delta} days"
+
+    match = re.fullmatch(r"what day is (.+)", text)
+    if match:
+        subject = match.group(1).strip()
+        target = parse_reference_date(subject, now=now)
+        if target:
+            return f"{target.isoformat()} is a {target.strftime('%A')}"
+
+    raise ValueError("Unsupported date/time reasoning query")
 
 # --- NEW TOOLS ---
 
@@ -267,4 +361,7 @@ AVAILABLE_TOOLS = {
     "torch": torch,
     "get_wifi_info": get_wifi_info,
     "calculate": calculate,
+    "get_utc_time": get_utc_time,
+    "get_chronometer": get_chronometer,
+    "date_time_reason": date_time_reason,
 }

@@ -56,6 +56,17 @@ class FastPathRouter:
 
         ]
         self.math_pattern = re.compile(r"[0-9][0-9\.\s\+\-\*\/%\(\)]*[0-9\)]")
+        self.datetime_prefixes = (
+            "what day is ",
+            "what date is ",
+            "how many days until ",
+            "what time is it in utc",
+            "current time in utc",
+            "utc time",
+            "how long have you been running",
+            "chronometer",
+            "elapsed time",
+        )
 
     def handle_open_search(self, match):
         site = match.group(1).lower()
@@ -142,6 +153,14 @@ class FastPathRouter:
             route="calculate",
         )
 
+    def handle_date_time_reason(self, query, user_message):
+        return self.execute_tool(
+            "date_time_reason",
+            {"query": query},
+            user_message,
+            route="date_time_reason",
+        )
+
     def maybe_route_math(self, message):
         clean_msg = message.lower().strip()
         candidate = clean_msg
@@ -162,6 +181,12 @@ class FastPathRouter:
         if not any(op in candidate for op in ("+", "-", "*", "/", "%", "(", ")")):
             return None
         return self.handle_calculate(candidate, message)
+
+    def maybe_route_datetime(self, message):
+        clean_msg = message.lower().strip()
+        if any(clean_msg.startswith(prefix) or clean_msg == prefix for prefix in self.datetime_prefixes):
+            return self.handle_date_time_reason(clean_msg.rstrip(" ?"), message)
+        return None
 
 
     def handle_brightness(self, match):
@@ -222,6 +247,10 @@ class FastPathRouter:
         if math_route:
             print(f"⚡ Fast-Path math match found for: '{message}'")
             return math_route
+        datetime_route = self.maybe_route_datetime(message)
+        if datetime_route:
+            print(f"⚡ Fast-Path datetime match found for: '{message}'")
+            return datetime_route
         for pattern, handler in self.patterns:
             # Use match for greetings to ensure they don't hijack complex sentences
             if "hi|" in pattern or "hello|" in pattern:

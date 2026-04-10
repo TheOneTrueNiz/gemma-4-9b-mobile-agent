@@ -120,6 +120,11 @@ def validate_tool_call(available_tools, tool_name, args, user_message):
         if not expression:
             return False, normalized_args, "Calculation expression cannot be empty."
 
+    if tool_name == "date_time_reason":
+        query = str(normalized_args.get("query", "")).strip()
+        if not query:
+            return False, normalized_args, "Date/time reasoning query cannot be empty."
+
     if tool_name == "tts_speak":
         text = str(normalized_args.get("text", "")).strip()
         if not text:
