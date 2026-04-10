@@ -35,3 +35,15 @@ class ToolPolicyTests(unittest.TestCase):
         }
         selected = select_relevant_tools("calculate 44 / 11", tools)
         self.assertIn("calculate", selected)
+
+    def test_text_utility_is_read_only_and_query_selected(self):
+        tools = {
+            "web_search": object(),
+            "recall": object(),
+            "remember": object(),
+            "text_utility": object(),
+        }
+        self.assertEqual(get_tool_risk("text_utility"), "read_only")
+        self.assertFalse(requires_critic_review("text_utility"))
+        selected = select_relevant_tools("uppercase hello world", tools)
+        self.assertIn("text_utility", selected)

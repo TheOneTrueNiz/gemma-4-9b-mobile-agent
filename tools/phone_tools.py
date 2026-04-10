@@ -74,6 +74,13 @@ STORAGE_UNITS_IN_BYTES = {
     "tib": 1024.0 ** 4,
 }
 
+
+def strip_wrapping_quotes(text):
+    value = (text or "").strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
 def run_termux_command(command):
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=True)
@@ -278,6 +285,40 @@ def convert_units(value, from_unit, to_unit):
 
     raise ValueError("Unsupported conversion units")
 
+
+def text_utility(operation, text):
+    """Performs deterministic text transforms and counts."""
+    op = (operation or "").strip().lower().replace("-", "_").replace(" ", "_")
+    value = strip_wrapping_quotes(text)
+    if not value:
+        raise ValueError("Text cannot be empty")
+
+    if op in {"count_words", "word_count"}:
+        words = re.findall(r"\S+", value)
+        return {"operation": "count_words", "value": len(words), "unit": "words", "text": value}
+
+    if op in {"count_characters", "character_count", "count_chars", "char_count"}:
+        return {"operation": "count_characters", "value": len(value), "unit": "characters", "text": value}
+
+    if op in {"count_lines", "line_count"}:
+        return {
+            "operation": "count_lines",
+            "value": len(value.splitlines()) if value else 0,
+            "unit": "lines",
+            "text": value,
+        }
+
+    if op == "uppercase":
+        return {"operation": "uppercase", "value": value.upper(), "unit": "text", "text": value}
+
+    if op == "lowercase":
+        return {"operation": "lowercase", "value": value.lower(), "unit": "text", "text": value}
+
+    if op == "reverse":
+        return {"operation": "reverse", "value": value[::-1], "unit": "text", "text": value}
+
+    raise ValueError("Unsupported text utility operation")
+
 # --- NEW TOOLS ---
 
 def list_files(directory="."):
@@ -440,4 +481,5 @@ AVAILABLE_TOOLS = {
     "get_chronometer": get_chronometer,
     "date_time_reason": date_time_reason,
     "convert_units": convert_units,
+    "text_utility": text_utility,
 }

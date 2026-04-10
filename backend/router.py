@@ -70,6 +70,32 @@ class FastPathRouter:
         self.conversion_pattern = re.compile(
             r"^(?:convert\s+)?(?P<value>-?\d+(?:\.\d+)?)\s*(?P<from_unit>[a-zA-Z]+)\s+(?:to|in)\s+(?P<to_unit>[a-zA-Z]+)\??$"
         )
+        self.text_utility_patterns = [
+            (
+                re.compile(r"^(?:count|how many)\s+words\s+(?:are in|in)\s+(?P<text>.+)\??$", re.I),
+                "count_words",
+            ),
+            (
+                re.compile(r"^(?:count|how many)\s+characters\s+(?:are in|in)\s+(?P<text>.+)\??$", re.I),
+                "count_characters",
+            ),
+            (
+                re.compile(r"^(?:count|how many)\s+lines\s+(?:are in|in)\s+(?P<text>.+)\??$", re.I),
+                "count_lines",
+            ),
+            (
+                re.compile(r"^uppercase\s+(?P<text>.+)\??$", re.I),
+                "uppercase",
+            ),
+            (
+                re.compile(r"^lowercase\s+(?P<text>.+)\??$", re.I),
+                "lowercase",
+            ),
+            (
+                re.compile(r"^reverse\s+(?P<text>.+)\??$", re.I),
+                "reverse",
+            ),
+        ]
 
     def handle_open_search(self, match):
         site = match.group(1).lower()
@@ -173,6 +199,20 @@ class FastPathRouter:
             route="convert_units",
         )
 
+    def handle_text_utility(self, operation, text, user_message):
+        def formatter(result):
+            if result["unit"] == "text":
+                return result["value"]
+            return f"{result['value']} {result['unit']}"
+
+        return self.execute_tool(
+            "text_utility",
+            {"operation": operation, "text": text},
+            user_message,
+            formatter=formatter,
+            route="text_utility",
+        )
+
     def maybe_route_math(self, message):
         clean_msg = message.lower().strip()
         candidate = clean_msg
@@ -211,6 +251,14 @@ class FastPathRouter:
             match.group("to_unit"),
             message,
         )
+
+    def maybe_route_text_utility(self, message):
+        clean_msg = message.strip()
+        for pattern, operation in self.text_utility_patterns:
+            match = pattern.fullmatch(clean_msg)
+            if match:
+                return self.handle_text_utility(operation, match.group("text"), message)
+        return None
 
 
     def handle_brightness(self, match):
@@ -279,6 +327,10 @@ class FastPathRouter:
         if conversion_route:
             print(f"⚡ Fast-Path conversion match found for: '{message}'")
             return conversion_route
+        text_utility_route = self.maybe_route_text_utility(message)
+        if text_utility_route:
+            print(f"⚡ Fast-Path text utility match found for: '{message}'")
+            return text_utility_route
         for pattern, handler in self.patterns:
             # Use match for greetings to ensure they don't hijack complex sentences
             if "hi|" in pattern or "hello|" in pattern:

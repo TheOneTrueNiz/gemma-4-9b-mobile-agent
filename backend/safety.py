@@ -136,6 +136,14 @@ def validate_tool_call(available_tools, tool_name, args, user_message):
         if not from_unit or not to_unit:
             return False, normalized_args, "Conversion requires from_unit and to_unit."
 
+    if tool_name == "text_utility":
+        operation = str(normalized_args.get("operation", "")).strip()
+        text = str(normalized_args.get("text", ""))
+        if not operation:
+            return False, normalized_args, "Text utility requires an operation."
+        if not text.strip():
+            return False, normalized_args, "Text utility requires text."
+
     if tool_name == "tts_speak":
         text = str(normalized_args.get("text", "")).strip()
         if not text:

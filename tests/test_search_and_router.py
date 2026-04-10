@@ -4,7 +4,14 @@ from unittest.mock import patch
 from backend.router import router
 from datetime import datetime
 
-from tools.phone_tools import calculate, convert_units, date_time_reason, extract_duckduckgo_html_results, web_search
+from tools.phone_tools import (
+    calculate,
+    convert_units,
+    date_time_reason,
+    extract_duckduckgo_html_results,
+    text_utility,
+    web_search,
+)
 
 
 SAMPLE_HTML = """
@@ -54,6 +61,15 @@ class SearchAndRouterTests(unittest.TestCase):
 
     def test_convert_units_storage(self):
         self.assertEqual(convert_units(2048, "mb", "gb"), 2.048)
+
+    def test_text_utility_counts_words(self):
+        result = text_utility("count_words", "one two three")
+        self.assertEqual(result["value"], 3)
+        self.assertEqual(result["unit"], "words")
+
+    def test_text_utility_uppercases_text(self):
+        result = text_utility("uppercase", "Gemma on phone")
+        self.assertEqual(result["value"], "GEMMA ON PHONE")
 
     def test_extract_duckduckgo_html_results(self):
         results = extract_duckduckgo_html_results(SAMPLE_HTML)
@@ -115,6 +131,16 @@ class SearchAndRouterTests(unittest.TestCase):
         response = router.route("convert 5 miles to km")
         self.assertIn("5 miles =", response["response"])
         self.assertEqual(response["trace"][0]["tool"], "convert_units")
+
+    def test_router_routes_word_count(self):
+        response = router.route("count words in 'one two three'")
+        self.assertEqual(response["response"], "3 words")
+        self.assertEqual(response["trace"][0]["tool"], "text_utility")
+
+    def test_router_routes_uppercase(self):
+        response = router.route("uppercase hello phone agent")
+        self.assertEqual(response["response"], "HELLO PHONE AGENT")
+        self.assertEqual(response["trace"][0]["tool"], "text_utility")
 
 
 if __name__ == "__main__":
