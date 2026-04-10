@@ -8,16 +8,267 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        .chat-container { height: calc(100vh - 200px); overflow-y: auto; }
-        .message-bubble { max-width: 85%; border-radius: 16px; margin-bottom: 12px; padding: 14px; line-height: 1.5; }
-        .user-bubble { background: #2563eb; color: white; margin-left: auto; border-bottom-right-radius: 4px; }
-        .assistant-bubble { background: #f3f4f6; color: #1f2937; margin-right: auto; border-bottom-left-radius: 4px; border: 1px solid #e5e7eb; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        :root {
+            --bg-0: #07131b;
+            --bg-1: #0c2430;
+            --bg-2: #10394a;
+            --panel: rgba(8, 20, 28, 0.78);
+            --panel-strong: rgba(5, 12, 18, 0.9);
+            --line: rgba(139, 208, 255, 0.18);
+            --line-strong: rgba(139, 208, 255, 0.35);
+            --text: #e7f6ff;
+            --muted: #87a8b8;
+            --accent: #6ee7d2;
+            --accent-2: #f8b84e;
+            --accent-3: #6bb8ff;
+            --ok: #7cf29a;
+            --danger: #ff9c8c;
+            --shadow: 0 22px 60px rgba(0, 0, 0, 0.35);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            min-height: 100%;
+            margin: 0;
+            background:
+                radial-gradient(circle at top left, rgba(110, 231, 210, 0.14), transparent 28%),
+                radial-gradient(circle at top right, rgba(107, 184, 255, 0.18), transparent 32%),
+                linear-gradient(160deg, var(--bg-0), var(--bg-1) 48%, var(--bg-2));
+            color: var(--text);
+            font-family: "Space Grotesk", sans-serif;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            background-size: 28px 28px;
+            mask-image: radial-gradient(circle at center, black 50%, transparent 88%);
+            pointer-events: none;
+        }
+
+        #root {
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            min-height: 100vh;
+            max-width: 460px;
+            margin: 0 auto;
+            padding: 20px 14px 16px;
+            position: relative;
+        }
+
+        .app-shell::before,
+        .app-shell::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(18px);
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .app-shell::before {
+            width: 144px;
+            height: 144px;
+            background: rgba(110, 231, 210, 0.2);
+            top: 44px;
+            right: -18px;
+        }
+
+        .app-shell::after {
+            width: 120px;
+            height: 120px;
+            background: rgba(248, 184, 78, 0.14);
+            bottom: 148px;
+            left: -28px;
+        }
+
+        .glass-panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(18px);
+        }
+
+        .glass-strong {
+            background: var(--panel-strong);
+            border: 1px solid var(--line-strong);
+        }
+
+        .mono {
+            font-family: "IBM Plex Mono", monospace;
+        }
+
+        .chat-container {
+            height: calc(100vh - 360px);
+            min-height: 320px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .message-bubble {
+            max-width: 92%;
+            margin-bottom: 12px;
+            padding: 14px 16px;
+            line-height: 1.55;
+            border-radius: 22px;
+            animation: riseIn 260ms ease-out;
+        }
+
+        .user-bubble {
+            margin-left: auto;
+            color: #051017;
+            background: linear-gradient(135deg, #9bf6e5, #71baff);
+            border-bottom-right-radius: 6px;
+            box-shadow: 0 10px 28px rgba(107, 184, 255, 0.22);
+        }
+
+        .assistant-bubble {
+            margin-right: auto;
+            background: linear-gradient(180deg, rgba(13, 29, 39, 0.95), rgba(8, 19, 27, 0.92));
+            color: var(--text);
+            border: 1px solid rgba(139, 208, 255, 0.16);
+            border-bottom-left-radius: 6px;
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.06);
+            padding: 8px 12px;
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1.3fr 0.9fr;
+            gap: 12px;
+        }
+
+        .orb {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            box-shadow: 0 0 18px currentColor;
+        }
+
+        .action-card {
+            min-width: 116px;
+            border-radius: 20px;
+            border: 1px solid rgba(139, 208, 255, 0.12);
+            background: linear-gradient(180deg, rgba(18, 40, 53, 0.82), rgba(8, 18, 25, 0.92));
+            padding: 14px;
+            text-align: left;
+            transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+        }
+
+        .action-card:active {
+            transform: scale(0.97);
+        }
+
+        .action-card:hover {
+            border-color: rgba(110, 231, 210, 0.42);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+        }
+
+        .trace-panel {
+            border-radius: 22px;
+            border: 1px solid rgba(248, 184, 78, 0.22);
+            background: linear-gradient(180deg, rgba(60, 42, 14, 0.5), rgba(28, 23, 12, 0.52));
+        }
+
+        .raw-trace {
+            border-radius: 18px;
+            border: 1px solid rgba(139, 208, 255, 0.12);
+            background: rgba(4, 11, 16, 0.78);
+        }
+
+        .command-bar {
+            background: linear-gradient(180deg, rgba(9, 20, 29, 0.95), rgba(6, 14, 21, 0.95));
+            border: 1px solid rgba(139, 208, 255, 0.16);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .send-button {
+            background: linear-gradient(135deg, #6ee7d2, #6bb8ff);
+            color: #031019;
+            box-shadow: 0 14px 26px rgba(107, 184, 255, 0.24);
+        }
+
+        .send-button:disabled {
+            opacity: 0.45;
+            box-shadow: none;
+        }
+
+        .stagger {
+            animation: riseIn 360ms ease-out;
+        }
+
+        .stagger-2 {
+            animation: riseIn 460ms ease-out;
+        }
+
+        .stagger-3 {
+            animation: riseIn 560ms ease-out;
+        }
+
+        @keyframes riseIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(139, 208, 255, 0.32);
+            border-radius: 999px;
+        }
+
+        @media (max-width: 480px) {
+            .app-shell {
+                padding: 14px 10px 12px;
+            }
+
+            .hero-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chat-container {
+                height: calc(100vh - 392px);
+            }
+        }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
@@ -25,7 +276,16 @@
 
         function App() {
             const [messages, setMessages] = useState([
-                { user: "", assistant: "Hello! I'm your Gemma 4 Mobile Agent. I'm ready to help with your phone, search the web, or access your files.", trace: [], traceSummary: [], mode: "system", requestId: "welcome", requestDurationMs: null, showRawTrace: false }
+                {
+                    user: "",
+                    assistant: "Gemma Mobile is online. Ask for device actions, deterministic utilities, memory, or local agent work.",
+                    trace: [],
+                    traceSummary: [],
+                    mode: "system",
+                    requestId: "welcome",
+                    requestDurationMs: null,
+                    showRawTrace: false
+                }
             ]);
             const [input, setInput] = useState("");
             const [loading, setLoading] = useState(false);
@@ -48,12 +308,23 @@
             const sendMessage = async (text) => {
                 const msg = text || input;
                 if (!msg.trim() || loading) return;
-                
+
                 const userMessage = msg;
                 setInput("");
                 setLoading(true);
-                
-                setMessages(prev => [...prev, { user: userMessage, assistant: "Thinking...", trace: [], traceSummary: [], mode: "pending", requestId: `pending-${Date.now()}`, requestDurationMs: null, showRawTrace: false }]);
+                setMessages(prev => [
+                    ...prev,
+                    {
+                        user: userMessage,
+                        assistant: "Working...",
+                        trace: [],
+                        traceSummary: [],
+                        mode: "pending",
+                        requestId: `pending-${Date.now()}`,
+                        requestDurationMs: null,
+                        showRawTrace: false
+                    }
+                ]);
 
                 try {
                     const history = messages.filter(m => m.user).map(m => ({ user: m.user, assistant: m.assistant }));
@@ -63,7 +334,7 @@
                         body: JSON.stringify({ message: userMessage, history })
                     });
                     const data = await res.json();
-                    
+
                     setMessages(prev => {
                         const updated = [...prev];
                         updated[updated.length - 1].assistant = data.response;
@@ -77,7 +348,7 @@
                 } catch (error) {
                     setMessages(prev => {
                         const updated = [...prev];
-                        updated[updated.length - 1].assistant = "⚠️ Error connecting to the agent. Make sure the server is running.";
+                        updated[updated.length - 1].assistant = "Connection failed. Check the backend and actor engine.";
                         updated[updated.length - 1].trace = [{ type: "exception", message: String(error) }];
                         updated[updated.length - 1].traceSummary = [`exception: ${String(error)}`];
                         updated[updated.length - 1].mode = "error";
@@ -90,14 +361,14 @@
             };
 
             const quickActions = [
-                { icon: "🔋", label: "Battery", cmd: "battery" },
-                { icon: "📍", label: "Location", cmd: "get location" },
-                { icon: "🔦", label: "Torch", cmd: "flashlight" },
-                { icon: "🔊", label: "Speak", cmd: "say Hello, I am Gemma!" },
-                { icon: "📋", label: "Clipboard", cmd: "get clipboard" },
-                { icon: "🔎", label: "Search", cmd: "Search the web for today news" },
-                { icon: "📂", label: "Files", cmd: "List files in my storage downloads" },
-                { icon: "📳", label: "Vibrate", cmd: "vibrate" }
+                { glyph: "01", label: "Power Check", hint: "Battery", cmd: "battery" },
+                { glyph: "02", label: "Field Scan", hint: "Location", cmd: "get location" },
+                { glyph: "03", label: "Torch", hint: "Flashlight", cmd: "flashlight" },
+                { glyph: "04", label: "Clipboard", hint: "Current copy", cmd: "get clipboard" },
+                { glyph: "05", label: "Math", hint: "2 + 2 * 5", cmd: "what is 2 + 2 * 5?" },
+                { glyph: "06", label: "UTC Clock", hint: "Current UTC", cmd: "what time is it in utc" },
+                { glyph: "07", label: "Convert", hint: "5 miles to km", cmd: "convert 5 miles to km" },
+                { glyph: "08", label: "Utility", hint: "Uppercase", cmd: "uppercase hello phone agent" }
             ];
 
             const visibleTrace = (trace) => {
@@ -126,168 +397,210 @@
                 });
             };
 
+            const lastMessage = messages[messages.length - 1];
 
             return (
-                <div className="max-w-md mx-auto bg-white min-h-screen flex flex-col shadow-2xl border-x border-slate-200">
-                    <header className="bg-blue-700 text-white p-5 shadow-md sticky top-0 z-10 flex justify-between items-center">
-                        <div>
-                            <h1 className="text-xl font-extrabold tracking-tight">GEMMA 4 MOBILE</h1>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="h-2 w-2 bg-green-400 rounded-full"></span>
-                                <p className="text-[10px] uppercase font-bold opacity-80 tracking-widest text-green-100">
-                                    {status.actor_online ? `${status.actor_model} Online` : "Engine Offline"}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="p-2 bg-blue-800 rounded-lg">
-                            <span className="text-xl">🤖</span>
-                        </div>
-                    </header>
-
-                    <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-[11px] uppercase tracking-wider font-semibold text-slate-600">
-                        <span>{showTrace ? "Trace Visible" : "Trace Hidden"}</span>
-                        <div className="flex items-center gap-2">
-                            <select
-                                value={traceFilter}
-                                onChange={(e) => setTraceFilter(e.target.value)}
-                                className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-bold text-slate-700"
-                            >
-                                <option value="all">All</option>
-                                <option value="request">Request</option>
-                                <option value="fast_path_tool">Fast Path</option>
-                                <option value="fast_path_search">Fast Search</option>
-                                <option value="state_transition">State</option>
-                                <option value="runtime_budget">Budget</option>
-                                <option value="actor">Actor</option>
-                                <option value="tool_parse">Tool Parse</option>
-                                <option value="critic">Critic</option>
-                                <option value="tool_execution">Tool Exec</option>
-                                <option value="direct_fallback">Fallback</option>
-                                <option value="answer_cleanup">Cleanup</option>
-                                <option value="exception">Exception</option>
-                            </select>
-                            <button
-                                onClick={() => setShowTrace(prev => !prev)}
-                                className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-bold text-slate-700"
-                            >
-                                {showTrace ? "Hide Debug" : "Show Debug"}
-                            </button>
-                        </div>
-                    </div>
-
-                    <main className="chat-container p-4 flex-1 bg-white">
-                        {messages.map((m, i) => (
-                            <div key={i} className="animate-fade-in">
-                                {m.user && (
-                                    <div className="message-bubble user-bubble shadow-sm">
-                                        {m.user}
+                <div className="app-shell">
+                    <div className="space-y-4">
+                        <section className="glass-panel rounded-[30px] p-4 stagger">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <div className="chip mono text-[10px] text-cyan-100">
+                                        <span className="orb" style={{ color: status.actor_online ? "var(--ok)" : "var(--danger)", background: "currentColor" }}></span>
+                                        {status.actor_online ? "Actor Online" : "Actor Offline"}
                                     </div>
-                                )}
-                                <div className="message-bubble assistant-bubble shadow-sm text-sm whitespace-pre-wrap">
-                                    {m.assistant}
+                                    <h1 className="mt-4 text-3xl font-bold tracking-[-0.04em] text-white">GEMMA MOBILE</h1>
+                                    <p className="mt-2 max-w-[18rem] text-sm leading-6 text-slate-300">
+                                        Local agent shell for phone control, deterministic utilities, memory, and traced execution.
+                                    </p>
                                 </div>
-                                {showTrace && m.traceSummary && m.traceSummary.length > 0 && (
-                                    <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                                        <div className="mb-2 flex items-center justify-between gap-2">
-                                            <div>
-                                                <div className="font-semibold uppercase tracking-wide text-amber-700">Trace Summary</div>
-                                                <div className="mt-2 flex flex-wrap gap-2">
-                                                    <span className="rounded-full bg-white px-2.5 py-1 font-bold uppercase tracking-wide text-[10px] text-slate-700 border border-amber-200">
-                                                        Mode: {m.mode || "agentic"}
-                                                    </span>
-                                                    <span className="rounded-full bg-white px-2.5 py-1 font-bold uppercase tracking-wide text-[10px] text-slate-700 border border-amber-200">
-                                                        Route: {getTraceMeta(m).route}
-                                                    </span>
-                                                    {getTraceMeta(m).family && (
-                                                        <span className="rounded-full bg-white px-2.5 py-1 font-bold uppercase tracking-wide text-[10px] text-slate-700 border border-amber-200">
-                                                            Family: {getTraceMeta(m).family}
-                                                        </span>
-                                                    )}
-                                                    {getTraceMeta(m).deterministic && (
-                                                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-bold uppercase tracking-wide text-[10px] text-emerald-800 border border-emerald-200">
-                                                            Deterministic
-                                                        </span>
+                                <div className="glass-strong rounded-[26px] px-4 py-3 text-right">
+                                    <div className="mono text-[10px] uppercase tracking-[0.24em] text-cyan-200">Engine</div>
+                                    <div className="mt-2 text-sm font-semibold text-white">{status.actor_model}</div>
+                                    <div className="mt-3 h-px w-full bg-cyan-300/15"></div>
+                                    <div className="mt-3 mono text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                                        {showTrace ? "Trace Visible" : "Trace Hidden"}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="hero-grid mt-4">
+                                <div className="glass-strong rounded-[24px] p-4 stagger-2">
+                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Mission Feed</div>
+                                    <div className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white">
+                                        {lastMessage?.mode === "pending" ? "Running request" : "Ready for next task"}
+                                    </div>
+                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                        {loading ? "The runtime is processing the current turn." : "Fast paths, deterministic tools, and agentic traces are live."}
+                                    </div>
+                                </div>
+                                <div className="glass-strong rounded-[24px] p-4 stagger-3">
+                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Operator Deck</div>
+                                    <div className="mt-3 flex items-center justify-between gap-3">
+                                        <button
+                                            onClick={() => setShowTrace(prev => !prev)}
+                                            className="chip mono text-[10px] text-white"
+                                        >
+                                            {showTrace ? "Hide Debug" : "Show Debug"}
+                                        </button>
+                                        <select
+                                            value={traceFilter}
+                                            onChange={(e) => setTraceFilter(e.target.value)}
+                                            className="mono rounded-full border border-cyan-300/20 bg-slate-950/60 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-slate-200 outline-none"
+                                        >
+                                            <option value="all">All</option>
+                                            <option value="request">Request</option>
+                                            <option value="fast_path_tool">Fast Path</option>
+                                            <option value="fast_path_search">Fast Search</option>
+                                            <option value="state_transition">State</option>
+                                            <option value="runtime_budget">Budget</option>
+                                            <option value="actor">Actor</option>
+                                            <option value="tool_parse">Tool Parse</option>
+                                            <option value="critic">Critic</option>
+                                            <option value="tool_execution">Tool Exec</option>
+                                            <option value="direct_fallback">Fallback</option>
+                                            <option value="answer_cleanup">Cleanup</option>
+                                            <option value="exception">Exception</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section className="glass-panel rounded-[28px] p-4 stagger-2">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Quick Launch</div>
+                                    <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Command Deck</div>
+                                </div>
+                                <div className="mono text-[11px] uppercase tracking-[0.16em] text-slate-400">Tap to dispatch</div>
+                            </div>
+                            <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+                                {quickActions.map((action, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => sendMessage(action.cmd)}
+                                        className="action-card"
+                                    >
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
+                                        <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
+                                        <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section className="glass-panel rounded-[28px] p-4 stagger-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Conversation</div>
+                                    <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Control Stream</div>
+                                </div>
+                                <div className="mono text-[11px] uppercase tracking-[0.16em] text-slate-400">{messages.length - 1} turns</div>
+                            </div>
+
+                            <main className="chat-container mt-4">
+                                {messages.map((m, i) => (
+                                    <div key={i}>
+                                        {m.user && (
+                                            <div className="message-bubble user-bubble text-sm font-medium">
+                                                {m.user}
+                                            </div>
+                                        )}
+                                        <div className="message-bubble assistant-bubble text-sm whitespace-pre-wrap">
+                                            {m.assistant}
+                                        </div>
+                                        {showTrace && m.traceSummary && m.traceSummary.length > 0 && (
+                                            <div className="trace-panel mb-3 p-3 text-xs text-amber-50">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Trace Summary</div>
+                                                        <div className="mt-2 flex flex-wrap gap-2">
+                                                            <span className="chip mono text-[10px] text-white">Mode: {m.mode || "agentic"}</span>
+                                                            <span className="chip mono text-[10px] text-white">Route: {getTraceMeta(m).route}</span>
+                                                            {getTraceMeta(m).family && (
+                                                                <span className="chip mono text-[10px] text-white">Family: {getTraceMeta(m).family}</span>
+                                                            )}
+                                                            {getTraceMeta(m).deterministic && (
+                                                                <span className="chip mono text-[10px] text-emerald-100" style={{ background: "rgba(124, 242, 154, 0.12)", borderColor: "rgba(124, 242, 154, 0.22)" }}>
+                                                                    Deterministic
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {m.requestDurationMs !== null && (
+                                                            <div className="mt-3 mono text-[11px] uppercase tracking-[0.16em] text-amber-100/85">
+                                                                Request Duration: {m.requestDurationMs}ms
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {visibleTrace(m.trace).length > 0 && (
+                                                        <button
+                                                            onClick={() => toggleRawTrace(i)}
+                                                            className="chip mono text-[10px] text-amber-50"
+                                                        >
+                                                            {m.showRawTrace ? "Hide Raw Trace" : "Show Raw Trace"}
+                                                        </button>
                                                     )}
                                                 </div>
-                                                {m.requestDurationMs !== null && (
-                                                    <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                                                        Request Duration: {m.requestDurationMs}ms
-                                                    </div>
-                                                )}
+                                                <div className="mt-3 space-y-1.5 text-[12px] leading-5 text-amber-50/90">
+                                                    {m.traceSummary.map((line, idx) => (
+                                                        <div key={idx} className="whitespace-pre-wrap">{line}</div>
+                                                    ))}
+                                                </div>
                                             </div>
-                                            {visibleTrace(m.trace).length > 0 && (
-                                                <button
-                                                    onClick={() => toggleRawTrace(i)}
-                                                    className="rounded-full border border-amber-300 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800"
-                                                >
-                                                    {m.showRawTrace ? "Hide Raw Trace" : "Show Raw Trace"}
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="space-y-1">
-                                            {m.traceSummary.map((line, idx) => (
-                                                <div key={idx} className="whitespace-pre-wrap">{line}</div>
-                                            ))}
-                                        </div>
+                                        )}
+                                        {showTrace && m.showRawTrace && visibleTrace(m.trace).length > 0 && (
+                                            <div className="raw-trace mb-4 p-3 text-xs text-slate-200">
+                                                <div className="mb-3 flex items-center justify-between mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">
+                                                    <span>{m.mode || "agentic"} trace</span>
+                                                    <span>{m.requestId || "local"}</span>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {visibleTrace(m.trace).map((item, idx) => (
+                                                        <pre key={idx} className="overflow-x-auto rounded-2xl border border-cyan-300/12 bg-slate-950/70 p-3 whitespace-pre-wrap">{JSON.stringify(item, null, 2)}</pre>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                                {showTrace && m.showRawTrace && visibleTrace(m.trace).length > 0 && (
-                                    <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                                        <div className="mb-2 flex items-center justify-between font-semibold uppercase tracking-wide text-slate-500">
-                                            <span>{m.mode || "agentic"} trace</span>
-                                            <span>{m.requestId || "local"}</span>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {visibleTrace(m.trace).map((item, idx) => (
-                                                <pre key={idx} className="whitespace-pre-wrap rounded-xl bg-white p-2 border border-slate-200 overflow-x-auto">{JSON.stringify(item, null, 2)}</pre>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
+                                ))}
+                                <div ref={chatEndRef}></div>
+                            </main>
+                        </section>
+
+                        <footer className="command-bar p-3">
+                            <div className="mb-3 flex items-center justify-between px-2">
+                                <div>
+                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Command Uplink</div>
+                                    <div className="mt-1 text-sm text-slate-300">Issue a direct device command or ask the local agent.</div>
+                                </div>
+                                <div className="chip mono text-[10px] text-white">{loading ? "Busy" : "Idle"}</div>
                             </div>
-                        ))}
-                        <div ref={chatEndRef}></div>
-                    </main>
-
-                    <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex gap-2 overflow-x-auto no-scrollbar scroll-smooth">
-                        {quickActions.map((action, i) => (
-                            <button 
-                                key={i}
-                                onClick={() => sendMessage(action.cmd)}
-                                className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-semibold whitespace-nowrap shadow-sm hover:border-blue-400 hover:text-blue-600 transition-all flex items-center gap-2 active:scale-95"
-                            >
-                                <span>{action.icon}</span> {action.label}
-                            </button>
-                        ))}
+                            <div className="flex items-center gap-2 rounded-[22px] border border-cyan-300/12 bg-slate-950/60 p-2">
+                                <input
+                                    type="text"
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                                    placeholder="Command your phone, ask a question, or inspect the runtime..."
+                                    className="flex-1 bg-transparent px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+                                    disabled={loading}
+                                />
+                                <button
+                                    onClick={() => sendMessage()}
+                                    className="send-button rounded-[18px] px-4 py-3 text-sm font-bold tracking-[-0.02em] transition-transform active:scale-95"
+                                    disabled={loading || !input.trim()}
+                                >
+                                    Send
+                                </button>
+                            </div>
+                        </footer>
                     </div>
-
-                    <footer className="p-4 border-t bg-white sticky bottom-0">
-                        <div className="flex gap-2 items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-                            <input 
-                                type="text"
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                                placeholder="Command your phone..."
-                                className="flex-1 bg-transparent px-4 py-2 text-sm focus:outline-none"
-                                disabled={loading}
-                            />
-                            <button 
-                                onClick={() => sendMessage()}
-                                className="bg-blue-600 text-white p-2.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 shadow-lg shadow-blue-200 transition-all active:scale-90"
-                                disabled={loading || !input.trim()}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                                    <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-                                </svg>
-                            </button>
-                        </div>
-                    </footer>
                 </div>
             );
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const root = ReactDOM.createRoot(document.getElementById("root"));
         root.render(<App />);
     </script>
 </body>
