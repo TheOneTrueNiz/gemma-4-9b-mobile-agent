@@ -253,6 +253,82 @@ class AgentRuntimeTests(unittest.TestCase):
         fallback_entries = [item for item in payload["trace"] if item.get("type") == "direct_fallback"]
         self.assertEqual(fallback_entries[-1]["status"], "ok")
 
+    def test_actor_path_executes_calculate_then_finishes(self):
+        responses = iter([
+            FakeResponse('{"tool":"calculate","args":{"expression":"2 + 2 * 5"}}'),
+            FakeResponse("12"),
+        ])
+        critic_calls = []
+        runtime = AgentRuntime(
+            available_tools={"calculate": lambda expression: 12},
+            validate_tool_call=lambda tools, tool_name, args, message: (True, args, None),
+            repair_and_alias_json=fake_repair_and_alias_json,
+            request_completion=lambda prompt, **kwargs: next(responses),
+            verify_with_critic=lambda proposal: critic_calls.append(proposal) or True,
+            requires_critic_review=lambda tool_name: False,
+            select_runtime_budget=lambda message: {
+                "complexity": "medium",
+                "hardware_profile": "test",
+                "n_predict": 128,
+                "max_steps": 3,
+                "completion_timeout": 30,
+            },
+            format_actor_prompt=fake_prompt_builder,
+            make_response=fake_make_response,
+        )
+
+        payload = runtime.run(
+            message="work out 2 + 2 * 5 for me",
+            history=[],
+            trace=[{"type": "request", "message": "work out 2 + 2 * 5 for me"}],
+            request_id="req8",
+            request_started_at=time.time(),
+        )
+
+        self.assertEqual(payload["response"], "12")
+        self.assertEqual(critic_calls, [])
+        tool_exec = [item for item in payload["trace"] if item.get("type") == "tool_execution"]
+        self.assertEqual(tool_exec[0]["tool"], "calculate")
+        critic_entries = [item for item in payload["trace"] if item.get("type") == "critic"]
+        self.assertEqual(critic_entries[0]["status"], "bypassed")
+
+    def test_actor_path_executes_text_utility_then_finishes(self):
+        responses = iter([
+            FakeResponse('{"tool":"text_utility","args":{"operation":"uppercase","text":"hello phone agent"}}'),
+            FakeResponse("HELLO PHONE AGENT"),
+        ])
+        runtime = AgentRuntime(
+            available_tools={"text_utility": lambda operation, text: {"operation": operation, "value": text.upper(), "unit": "text"}},
+            validate_tool_call=lambda tools, tool_name, args, message: (True, args, None),
+            repair_and_alias_json=fake_repair_and_alias_json,
+            request_completion=lambda prompt, **kwargs: next(responses),
+            verify_with_critic=lambda proposal: True,
+            requires_critic_review=lambda tool_name: False,
+            select_runtime_budget=lambda message: {
+                "complexity": "medium",
+                "hardware_profile": "test",
+                "n_predict": 128,
+                "max_steps": 3,
+                "completion_timeout": 30,
+            },
+            format_actor_prompt=fake_prompt_builder,
+            make_response=fake_make_response,
+        )
+
+        payload = runtime.run(
+            message="convert hello phone agent to uppercase",
+            history=[],
+            trace=[{"type": "request", "message": "convert hello phone agent to uppercase"}],
+            request_id="req9",
+            request_started_at=time.time(),
+        )
+
+        self.assertEqual(payload["response"], "HELLO PHONE AGENT")
+        tool_exec = [item for item in payload["trace"] if item.get("type") == "tool_execution"]
+        self.assertEqual(tool_exec[0]["tool"], "text_utility")
+        transitions = [item for item in payload["trace"] if item.get("type") == "state_transition"]
+        self.assertEqual(transitions[-1]["to_state"], "ANSWER")
+
 
 if __name__ == "__main__":
     unittest.main()

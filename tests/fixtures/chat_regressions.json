@@ -9,7 +9,12 @@
     "trace_types": [
       "request",
       "fast_path_tool"
-    ]
+    ],
+    "expected_first_trace": {
+      "type": "fast_path_tool",
+      "family": "device",
+      "deterministic": false
+    }
   },
   {
     "name": "blocked_sensitive_path",
@@ -21,7 +26,13 @@
     "trace_types": [
       "request",
       "fast_path_tool"
-    ]
+    ],
+    "expected_first_trace": {
+      "type": "fast_path_tool",
+      "family": "device",
+      "deterministic": false,
+      "status": "blocked"
+    }
   },
   {
     "name": "search_fast_path",
@@ -35,5 +46,81 @@
       "request",
       "fast_path_search"
     ]
+  },
+  {
+    "name": "math_fast_path",
+    "message": "what is 2 + 2 * 5?",
+    "expected_mode": "fast_path",
+    "response_contains": [
+      "= 12"
+    ],
+    "trace_types": [
+      "request",
+      "fast_path_tool"
+    ],
+    "expected_first_trace": {
+      "type": "fast_path_tool",
+      "family": "math",
+      "deterministic": true,
+      "tool": "calculate",
+      "status": "ok"
+    }
+  },
+  {
+    "name": "datetime_fast_path",
+    "message": "how long have you been running",
+    "expected_mode": "fast_path",
+    "response_contains": [
+      "Elapsed time:"
+    ],
+    "trace_types": [
+      "request",
+      "fast_path_tool"
+    ],
+    "expected_first_trace": {
+      "type": "fast_path_tool",
+      "family": "time",
+      "deterministic": true,
+      "tool": "date_time_reason",
+      "status": "ok"
+    }
+  },
+  {
+    "name": "conversion_fast_path",
+    "message": "convert 5 miles to km",
+    "expected_mode": "fast_path",
+    "response_contains": [
+      "5 miles = 8.04672 km"
+    ],
+    "trace_types": [
+      "request",
+      "fast_path_tool"
+    ],
+    "expected_first_trace": {
+      "type": "fast_path_tool",
+      "family": "conversion",
+      "deterministic": true,
+      "tool": "convert_units",
+      "status": "ok"
+    }
+  },
+  {
+    "name": "text_utility_fast_path",
+    "message": "uppercase hello phone agent",
+    "expected_mode": "fast_path",
+    "response_contains": [
+      "HELLO PHONE AGENT"
+    ],
+    "trace_types": [
+      "request",
+      "fast_path_tool"
+    ],
+    "expected_first_trace": {
+      "type": "fast_path_tool",
+      "family": "utility",
+      "deterministic": true,
+      "tool": "text_utility",
+      "status": "ok"
+    }
   }
 ]

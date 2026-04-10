@@ -33,6 +33,13 @@ def run_case(base_url, case):
         if expected_type not in trace_types:
             failures.append(f"trace missing type: {expected_type}")
 
+    first_trace = next((item for item in payload.get("trace", []) if item.get("type") != "request"), {})
+    expected_trace = case.get("expected_first_trace", {})
+    for key, expected_value in expected_trace.items():
+        actual_value = first_trace.get(key)
+        if actual_value != expected_value:
+            failures.append(f"first trace {key} expected {expected_value!r} got {actual_value!r}")
+
     return payload, failures
 
 
