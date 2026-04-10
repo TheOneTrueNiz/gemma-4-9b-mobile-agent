@@ -94,6 +94,24 @@ class MemoryRecallTests(unittest.TestCase):
         self.assertIn("Maya likes robotics", prompt)
         self.assertNotIn("Maya likes pizza", prompt)
 
+    @patch("backend.main.memory")
+    def test_format_actor_prompt_includes_deterministic_tool_rules(self, mock_memory):
+        mock_memory.recall.return_value = []
+        prompt = format_actor_prompt("convert 5 miles to km", history=[])
+        self.assertIn("DETERMINISTIC TOOL DISCIPLINE", prompt)
+        self.assertIn("use calculate", prompt)
+        self.assertIn("use date_time_reason", prompt)
+        self.assertIn("use convert_units", prompt)
+        self.assertIn("use text_utility", prompt)
+        self.assertIn("Do not guess or estimate when a deterministic tool applies", prompt)
+
+    @patch("backend.main.memory")
+    def test_format_actor_prompt_selects_text_utility_for_text_query(self, mock_memory):
+        mock_memory.recall.return_value = []
+        prompt = format_actor_prompt("uppercase hello phone agent", history=[])
+        self.assertIn("text_utility(operation, text)", prompt)
+        self.assertNotIn("send_sms(number, message)", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
