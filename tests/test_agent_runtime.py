@@ -217,6 +217,42 @@ class AgentRuntimeTests(unittest.TestCase):
         tool_exec = [item for item in payload["trace"] if item.get("type") == "tool_execution"]
         self.assertEqual(len(tool_exec), 2)
 
+    def test_simple_query_duplicate_tool_uses_direct_fallback(self):
+        responses = iter([
+            FakeResponse('{"tool":"web_search","args":{"query":"2 plus 2"}}'),
+            FakeResponse('{"tool":"web_search","args":{"query":"2 plus 2"}}'),
+            FakeResponse("4"),
+        ])
+        runtime = AgentRuntime(
+            available_tools={"web_search": lambda query: {"summary": query}},
+            validate_tool_call=lambda tools, tool_name, args, message: (True, args, None),
+            repair_and_alias_json=fake_repair_and_alias_json,
+            request_completion=lambda prompt, **kwargs: next(responses),
+            verify_with_critic=lambda proposal: True,
+            requires_critic_review=lambda tool_name: False,
+            select_runtime_budget=lambda message: {
+                "complexity": "simple",
+                "hardware_profile": "test",
+                "n_predict": 96,
+                "max_steps": 2,
+                "completion_timeout": 20,
+            },
+            format_actor_prompt=fake_prompt_builder,
+            make_response=fake_make_response,
+        )
+
+        payload = runtime.run(
+            message="what is 2 plus 2?",
+            history=[],
+            trace=[{"type": "request", "message": "what is 2 plus 2?"}],
+            request_id="req7",
+            request_started_at=time.time(),
+        )
+
+        self.assertEqual(payload["response"], "4")
+        fallback_entries = [item for item in payload["trace"] if item.get("type") == "direct_fallback"]
+        self.assertEqual(fallback_entries[-1]["status"], "ok")
+
 
 if __name__ == "__main__":
     unittest.main()

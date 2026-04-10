@@ -122,6 +122,12 @@ def finalize_user_answer(content, *, stalled=False):
     return cleaned
 
 
+def should_force_direct_fallback(runtime_budget, reason):
+    if runtime_budget.get("complexity") != "simple":
+        return False
+    return reason in {"json_repair_feedback", "tool_blocked", "duplicate_tool_call", "critic_rejected"}
+
+
 class AgentRuntime:
     def __init__(
         self,
@@ -145,6 +151,57 @@ class AgentRuntime:
         self.select_runtime_budget = select_runtime_budget
         self.format_actor_prompt = format_actor_prompt
         self.make_response = make_response
+
+    def attempt_direct_fallback(self, *, current_prompt, trace, step_number, runtime_budget):
+        fallback_prompt = current_prompt
+        fallback_prompt += (
+            "System: Stop using tools. Answer the user directly in plain text with one short sentence. "
+            "Do not output JSON. Do not mention tool errors or internal notes.\nAssistant:"
+        )
+        trace.append({
+            "type": "direct_fallback",
+            "step": step_number,
+            "status": "requested",
+        })
+        try:
+            response = self.request_completion(
+                fallback_prompt,
+                n_predict=min(runtime_budget["n_predict"], 64),
+                timeout=min(runtime_budget["completion_timeout"], 20),
+            )
+        except Exception as exc:
+            trace.append({
+                "type": "direct_fallback",
+                "step": step_number,
+                "status": "error",
+                "message": str(exc),
+            })
+            return None
+
+        if response.status_code != 200:
+            trace.append({
+                "type": "direct_fallback",
+                "step": step_number,
+                "status": "http_error",
+                "status_code": response.status_code,
+            })
+            return None
+
+        content = response.json()["content"].strip()
+        cleaned_content = finalize_user_answer(content, stalled=False)
+        trace.append({
+            "type": "direct_fallback",
+            "step": step_number,
+            "status": "ok",
+            "content_preview": cleaned_content[:240],
+        })
+        trace.append({
+            "type": "answer_cleanup",
+            "step": step_number,
+            "changed": cleaned_content != content,
+            "cleaned_preview": cleaned_content[:240],
+        })
+        return cleaned_content
 
     def run(self, *, message, history, trace, request_id, request_started_at):
         runtime_budget = self.select_runtime_budget(message)
@@ -222,6 +279,21 @@ class AgentRuntime:
                         "status": "malformed",
                     })
                     state = trace_state_transition(trace, state, "ACTOR_THINK", "json_repair_feedback", step=step_number)
+                    if should_force_direct_fallback(runtime_budget, "json_repair_feedback"):
+                        fallback_answer = self.attempt_direct_fallback(
+                            current_prompt=current_prompt,
+                            trace=trace,
+                            step_number=step_number,
+                            runtime_budget=runtime_budget,
+                        )
+                        if fallback_answer:
+                            trace_state_transition(trace, state, "ANSWER", "simple_direct_fallback", step=step_number)
+                            return self.make_response(
+                                fallback_answer,
+                                trace=trace,
+                                request_id=request_id,
+                                request_duration_ms=self._request_duration_ms(request_started_at),
+                            )
                     current_prompt = append_json_repair_feedback(current_prompt, content)
                     last_content = content
                     continue
@@ -239,6 +311,21 @@ class AgentRuntime:
                         })
                         rejection = "Critic rejected tool call."
                         state = trace_state_transition(trace, state, "ACTOR_THINK", "critic_rejected", step=step_number)
+                        if should_force_direct_fallback(runtime_budget, "critic_rejected"):
+                            fallback_answer = self.attempt_direct_fallback(
+                                current_prompt=current_prompt,
+                                trace=trace,
+                                step_number=step_number,
+                                runtime_budget=runtime_budget,
+                            )
+                            if fallback_answer:
+                                trace_state_transition(trace, state, "ANSWER", "simple_direct_fallback", step=step_number)
+                                return self.make_response(
+                                    fallback_answer,
+                                    trace=trace,
+                                    request_id=request_id,
+                                    request_duration_ms=self._request_duration_ms(request_started_at),
+                                )
                         current_prompt = append_tool_feedback(current_prompt, content, rejection, rejected=True)
                         last_content = rejection
                         continue
@@ -274,6 +361,21 @@ class AgentRuntime:
                         "reason": validation_error,
                     })
                     state = trace_state_transition(trace, state, "ACTOR_THINK", "tool_blocked", step=step_number)
+                    if should_force_direct_fallback(runtime_budget, "tool_blocked"):
+                        fallback_answer = self.attempt_direct_fallback(
+                            current_prompt=current_prompt,
+                            trace=trace,
+                            step_number=step_number,
+                            runtime_budget=runtime_budget,
+                        )
+                        if fallback_answer:
+                            trace_state_transition(trace, state, "ANSWER", "simple_direct_fallback", step=step_number)
+                            return self.make_response(
+                                fallback_answer,
+                                trace=trace,
+                                request_id=request_id,
+                                request_duration_ms=self._request_duration_ms(request_started_at),
+                            )
                     current_prompt = append_tool_feedback(current_prompt, content, result, blocked=True)
                     last_content = result
                     continue
@@ -290,6 +392,21 @@ class AgentRuntime:
                         "reason": "duplicate_tool_call",
                     })
                     state = trace_state_transition(trace, state, "ACTOR_THINK", "duplicate_tool_call", step=step_number)
+                    if should_force_direct_fallback(runtime_budget, "duplicate_tool_call"):
+                        fallback_answer = self.attempt_direct_fallback(
+                            current_prompt=current_prompt,
+                            trace=trace,
+                            step_number=step_number,
+                            runtime_budget=runtime_budget,
+                        )
+                        if fallback_answer:
+                            trace_state_transition(trace, state, "ANSWER", "simple_direct_fallback", step=step_number)
+                            return self.make_response(
+                                fallback_answer,
+                                trace=trace,
+                                request_id=request_id,
+                                request_duration_ms=self._request_duration_ms(request_started_at),
+                            )
                     current_prompt = append_tool_feedback(current_prompt, content, result, blocked=True)
                     last_content = result
                     continue
