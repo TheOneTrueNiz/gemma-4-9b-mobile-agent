@@ -3,6 +3,7 @@ READ_ONLY_TOOLS = {
     "get_location",
     "list_contacts",
     "get_time",
+    "calculate",
     "list_files",
     "read_file_content",
     "search_files",
