@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from backend.main import extract_recall_terms, rank_recall_results, recall_tool
+from backend.main import extract_recall_terms, rank_recall_results, recall_tool, remember_tool
 
 
 class MemoryRecallTests(unittest.TestCase):
@@ -34,6 +34,19 @@ class MemoryRecallTests(unittest.TestCase):
         text = recall_tool("Maya gymnastics Wednesday")
         self.assertIn("gymnastics practice", text)
         self.assertIn("Maya likes pizza", text)
+
+    @patch("backend.main.memory")
+    def test_remember_tool_rejects_transient_facts(self, mock_memory):
+        response = remember_tool("The battery is at 18 percent today", wing="World", floor="Status")
+        self.assertIn("Memory rejected: transient_fact", response)
+        mock_memory.add_fact.assert_not_called()
+
+    @patch("backend.main.memory")
+    def test_remember_tool_saves_normalized_useful_fact(self, mock_memory):
+        response = remember_tool("  Maya likes strawberry yogurt  ", wing=" Family ", floor=" Preferences ")
+        self.assertIn("Memory saved to Family > Preferences", response)
+        self.assertIn("(preference)", response)
+        mock_memory.add_fact.assert_called_once_with("Family", "Preferences", "Maya likes strawberry yogurt")
 
 
 if __name__ == "__main__":

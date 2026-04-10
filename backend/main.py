@@ -33,6 +33,7 @@ from backend.agent_runtime import (
 )
 from backend.router import router
 from backend.safety import validate_tool_call
+from backend.memory_policy import assess_memory_candidate
 
 # --- SMOLCLAW PATTERN: ARGUMENT ALIASING & REPAIR ---
 ARG_ALIASES = {
@@ -88,7 +89,14 @@ def remember_tool(fact, wing="World", floor="General"):
         wing: High-level domain (e.g., Identity, Projects, World).
         floor: Category within the wing (e.g., Family, Coding).
     """
-    return memory.add_fact(wing, floor, fact)
+    decision = assess_memory_candidate(fact, wing=wing, floor=floor)
+    if not decision["accepted"]:
+        return f"Memory rejected: {decision['reason']}"
+    memory.add_fact(decision["wing"], decision["floor"], decision["fact"])
+    return (
+        f"Memory saved to {decision['wing']} > {decision['floor']} "
+        f"({decision['memory_type']}): {decision['fact']}"
+    )
 
 def extract_recall_terms(query):
     base = (query or "").strip()
