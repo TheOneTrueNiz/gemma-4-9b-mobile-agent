@@ -15,6 +15,9 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "app/build.gradle.kts",
             "app/src/main/AndroidManifest.xml",
             "app/src/main/java/dev/niz/gemmalauncher/MainActivity.kt",
+            "app/src/main/java/dev/niz/gemmalauncher/LauncherUi.kt",
+            "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt",
+            "app/src/main/java/dev/niz/gemmalauncher/LauncherModels.kt",
         ]:
             self.assertTrue((ROOT / rel).exists(), rel)
 
@@ -40,9 +43,15 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("android.permission.INTERNET", permissions)
 
     def test_launcher_targets_local_backend(self):
-        activity = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/MainActivity.kt").read_text()
-        self.assertIn("http://127.0.0.1:1337/chat", activity)
+        backend_client = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt").read_text()
+        self.assertIn("http://127.0.0.1:1337/chat", backend_client)
         self.assertIn("android.intent.category.HOME", (ROOT / "app/src/main/AndroidManifest.xml").read_text())
+
+    def test_launcher_ui_has_app_search_and_dock(self):
+        ui = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherUi.kt").read_text()
+        self.assertIn("Search apps", ui)
+        self.assertIn("LauncherDock", ui)
+        self.assertIn("OverlaySheet.Apps", ui)
 
 
 if __name__ == "__main__":

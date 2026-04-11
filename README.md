@@ -105,6 +105,12 @@ Current launcher scaffold includes:
 - agent / phone / debug overlays
 - localhost `/chat` client for the existing backend
 
+Launcher code layout:
+- `MainActivity.kt` for Android entry/wiring
+- `LauncherUi.kt` for Compose surfaces and overlays
+- `BackendClient.kt` for localhost backend calls
+- `LauncherModels.kt` for shared launcher data types
+
 To turn it into an installable launcher, open the repo as an Android Studio project and build the `app` module.
 
 Validation:
