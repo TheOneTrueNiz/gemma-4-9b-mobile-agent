@@ -713,6 +713,7 @@
                 { key: "clipboard", label: "Clipboard", accent: "text-white" },
                 { key: "location", label: "Location", accent: "text-amber-200" },
             ];
+            const recentTurns = messages.filter(m => m.user).slice(-3).reverse();
 
             return (
                 <div className="app-shell">
@@ -812,6 +813,23 @@
                                                     <div className="mt-2 mono text-[10px] uppercase tracking-[0.16em] text-slate-500">
                                                         {widgets[item.key].refreshedAt ? `Updated ${widgets[item.key].refreshedAt}` : "Waiting"}
                                                     </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="surface-card wide">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Recent Activity</div>
+                                        <div className="mt-3 grid gap-2">
+                                            {recentTurns.length === 0 && (
+                                                <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3 text-sm text-slate-400">
+                                                    No recent launcher activity yet.
+                                                </div>
+                                            )}
+                                            {recentTurns.map((turn, idx) => (
+                                                <div key={idx} className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                                    <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{turn.mode || "agentic"}</div>
+                                                    <div className="mt-2 text-sm font-semibold text-white">{turn.user}</div>
+                                                    <div className="mt-1 text-xs leading-5 text-slate-400">{turn.assistant}</div>
                                                 </div>
                                             ))}
                                         </div>
@@ -1108,6 +1126,14 @@
                                     ))}
                                 </div>
                                 <div className="mt-4 grid gap-3">
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => fetchWidget({ key: "battery", message: "battery" })}
+                                            className="chip mono text-[10px] text-white"
+                                        >
+                                            Refresh Battery
+                                        </button>
+                                    </div>
                                     <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
                                         <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Battery Widget</div>
                                         <div className="mt-2 text-sm font-semibold text-emerald-200">
@@ -1151,6 +1177,14 @@
                                     ))}
                                 </div>
                                 <div className="mt-4 grid gap-3">
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => fetchWidget({ key: "utc", message: "what time is it in utc" })}
+                                            className="chip mono text-[10px] text-white"
+                                        >
+                                            Refresh UTC
+                                        </button>
+                                    </div>
                                     <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
                                         <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">UTC Widget</div>
                                         <div className="mt-2 text-sm font-semibold text-cyan-200">
@@ -1192,6 +1226,14 @@
                                         <div className="text-sm font-bold text-white">Store Launcher Preference</div>
                                         <div className="mt-1 text-xs text-slate-400">Reinforce current UI direction as memory.</div>
                                     </button>
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => fetchWidget({ key: "clipboard", message: "get clipboard" })}
+                                            className="chip mono text-[10px] text-white"
+                                        >
+                                            Refresh Clipboard
+                                        </button>
+                                    </div>
                                     <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
                                         <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Clipboard Widget</div>
                                         <div className="mt-2 text-sm font-semibold text-white">
@@ -1233,6 +1275,14 @@
                                         <div className="text-sm font-bold text-white">Search Device Stack</div>
                                         <div className="mt-1 text-xs text-slate-400">Look for current phone-agent ecosystem info.</div>
                                     </button>
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => fetchWidget({ key: "location", message: "get location" })}
+                                            className="chip mono text-[10px] text-white"
+                                        >
+                                            Refresh Location
+                                        </button>
+                                    </div>
                                 </div>
                             </section>
                         )}
