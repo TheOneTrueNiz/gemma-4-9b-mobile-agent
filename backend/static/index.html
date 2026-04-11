@@ -484,10 +484,10 @@
             const [surfaceMode, setSurfaceMode] = useState("home");
             const [homeClock, setHomeClock] = useState("");
             const [widgets, setWidgets] = useState({
-                battery: { value: "Loading...", loading: true, refreshedAt: null },
-                utc: { value: "Loading...", loading: true, refreshedAt: null },
-                clipboard: { value: "Loading...", loading: true, refreshedAt: null },
-                location: { value: "Loading...", loading: true, refreshedAt: null },
+                battery: { value: "Loading...", loading: true, refreshedAt: null, refreshedAtMs: null },
+                utc: { value: "Loading...", loading: true, refreshedAt: null, refreshedAtMs: null },
+                clipboard: { value: "Loading...", loading: true, refreshedAt: null, refreshedAtMs: null },
+                location: { value: "Loading...", loading: true, refreshedAt: null, refreshedAtMs: null },
             });
             const chatEndRef = useRef(null);
 
@@ -530,6 +530,7 @@
                             value: String(data.response || "").slice(0, 96) || "Unavailable",
                             loading: false,
                             refreshedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                            refreshedAtMs: Date.now(),
                         },
                     }));
                 } catch {
@@ -539,6 +540,7 @@
                             value: "Unavailable",
                             loading: false,
                             refreshedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                            refreshedAtMs: Date.now(),
                         },
                     }));
                 }
@@ -699,13 +701,47 @@
                 setActiveSheet(`tile:${key}`);
             };
 
+            const getWidgetStatusMeta = (widget) => {
+                if (widget.loading) {
+                    return { label: "SYNCING", className: "text-amber-100", style: { background: "rgba(251, 191, 36, 0.12)", borderColor: "rgba(251, 191, 36, 0.22)" } };
+                }
+                if (!widget.refreshedAtMs) {
+                    return { label: "IDLE", className: "text-slate-200", style: {} };
+                }
+                const ageMs = Date.now() - widget.refreshedAtMs;
+                if (ageMs > 1000 * 60 * 3) {
+                    return { label: "STALE", className: "text-rose-100", style: { background: "rgba(251, 113, 133, 0.12)", borderColor: "rgba(251, 113, 133, 0.22)" } };
+                }
+                return { label: "LIVE", className: "text-emerald-100", style: { background: "rgba(124, 242, 154, 0.12)", borderColor: "rgba(124, 242, 154, 0.22)" } };
+            };
+
+            const renderWidgetMeta = (widget) => {
+                const meta = getWidgetStatusMeta(widget);
+                return (
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className={`chip mono text-[10px] ${meta.className}`} style={meta.style}>{meta.label}</span>
+                        <span className="mono text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                            {widget.refreshedAt ? `Updated ${widget.refreshedAt}` : "Waiting"}
+                        </span>
+                    </div>
+                );
+            };
+
             const lastMessage = messages[messages.length - 1];
             const lastRoute = getTraceMeta(lastMessage || {});
+            const liveWidgetCount = Object.values(widgets).filter(widget => getWidgetStatusMeta(widget).label === "LIVE").length;
+            const syncingWidgetCount = Object.values(widgets).filter(widget => widget.loading).length;
             const homeHighlights = [
                 { label: "Runtime", value: status.actor_online ? "ONLINE" : "OFFLINE", accent: "text-emerald-300" },
                 { label: "Mode", value: surfaceMode.toUpperCase(), accent: "text-cyan-200" },
                 { label: "Route", value: (lastRoute.route || "standby").toUpperCase(), accent: "text-amber-200" },
                 { label: "Clock", value: homeClock || "--:--", accent: "text-white" },
+            ];
+            const launcherStatusChips = [
+                { label: status.actor_online ? "Runtime Ready" : "Runtime Offline", accent: status.actor_online ? "text-emerald-100" : "text-rose-100", style: status.actor_online ? { background: "rgba(124, 242, 154, 0.12)", borderColor: "rgba(124, 242, 154, 0.22)" } : { background: "rgba(251, 113, 133, 0.12)", borderColor: "rgba(251, 113, 133, 0.22)" } },
+                { label: `${liveWidgetCount}/4 Widgets Live`, accent: "text-cyan-100", style: { background: "rgba(103, 232, 249, 0.12)", borderColor: "rgba(103, 232, 249, 0.22)" } },
+                { label: syncingWidgetCount > 0 ? `${syncingWidgetCount} Syncing` : "Widgets Stable", accent: syncingWidgetCount > 0 ? "text-amber-100" : "text-slate-100", style: syncingWidgetCount > 0 ? { background: "rgba(251, 191, 36, 0.12)", borderColor: "rgba(251, 191, 36, 0.22)" } : {} },
+                { label: `Last Route ${(lastRoute.route || "standby").toUpperCase()}`, accent: "text-amber-100", style: { background: "rgba(251, 191, 36, 0.08)", borderColor: "rgba(251, 191, 36, 0.18)" } },
             ];
             const widgetCards = [
                 { key: "battery", label: "Battery", accent: "text-emerald-200" },
@@ -753,6 +789,11 @@
                                 >
                                     Chat Stream
                                 </button>
+                            </div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {launcherStatusChips.map((chip) => (
+                                    <span key={chip.label} className={`chip mono text-[10px] ${chip.accent}`} style={chip.style}>{chip.label}</span>
+                                ))}
                             </div>
                         </section>
 
@@ -810,9 +851,7 @@
                                                     <div className={`mt-2 text-sm font-semibold leading-6 ${item.accent}`}>
                                                         {widgets[item.key].loading ? "Refreshing..." : widgets[item.key].value}
                                                     </div>
-                                                    <div className="mt-2 mono text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                                                        {widgets[item.key].refreshedAt ? `Updated ${widgets[item.key].refreshedAt}` : "Waiting"}
-                                                    </div>
+                                                    {renderWidgetMeta(widgets[item.key])}
                                                 </div>
                                             ))}
                                         </div>
@@ -1139,12 +1178,14 @@
                                         <div className="mt-2 text-sm font-semibold text-emerald-200">
                                             {widgets.battery.loading ? "Refreshing..." : widgets.battery.value}
                                         </div>
+                                        {renderWidgetMeta(widgets.battery)}
                                     </div>
                                     <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
                                         <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Location Widget</div>
                                         <div className="mt-2 text-sm font-semibold text-amber-200">
                                             {widgets.location.loading ? "Refreshing..." : widgets.location.value}
                                         </div>
+                                        {renderWidgetMeta(widgets.location)}
                                     </div>
                                 </div>
                             </section>
@@ -1190,6 +1231,7 @@
                                         <div className="mt-2 text-sm font-semibold text-cyan-200">
                                             {widgets.utc.loading ? "Refreshing..." : widgets.utc.value}
                                         </div>
+                                        {renderWidgetMeta(widgets.utc)}
                                     </div>
                                 </div>
                             </section>
@@ -1239,6 +1281,7 @@
                                         <div className="mt-2 text-sm font-semibold text-white">
                                             {widgets.clipboard.loading ? "Refreshing..." : widgets.clipboard.value}
                                         </div>
+                                        {renderWidgetMeta(widgets.clipboard)}
                                     </div>
                                 </div>
                             </section>
@@ -1282,6 +1325,13 @@
                                         >
                                             Refresh Location
                                         </button>
+                                    </div>
+                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Location Widget</div>
+                                        <div className="mt-2 text-sm font-semibold text-amber-200">
+                                            {widgets.location.loading ? "Refreshing..." : widgets.location.value}
+                                        </div>
+                                        {renderWidgetMeta(widgets.location)}
                                     </div>
                                 </div>
                             </section>
