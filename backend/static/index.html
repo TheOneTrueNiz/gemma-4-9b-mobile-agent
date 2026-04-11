@@ -483,6 +483,12 @@
             const [activeSheet, setActiveSheet] = useState(null);
             const [surfaceMode, setSurfaceMode] = useState("home");
             const [homeClock, setHomeClock] = useState("");
+            const [widgets, setWidgets] = useState({
+                battery: "Loading...",
+                utc: "Loading...",
+                clipboard: "Loading...",
+                location: "Loading...",
+            });
             const chatEndRef = useRef(null);
 
             useEffect(() => {
@@ -494,6 +500,34 @@
                     .then((res) => res.json())
                     .then((data) => setStatus(data))
                     .catch(() => setStatus({ actor_online: false, actor_model: "Offline" }));
+            }, []);
+
+            useEffect(() => {
+                const commands = [
+                    { key: "battery", message: "battery" },
+                    { key: "utc", message: "what time is it in utc" },
+                    { key: "clipboard", message: "get clipboard" },
+                    { key: "location", message: "get location" },
+                ];
+
+                const fetchWidget = async ({ key, message }) => {
+                    try {
+                        const res = await fetch("/chat", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ message, history: [] })
+                        });
+                        const data = await res.json();
+                        setWidgets(prev => ({
+                            ...prev,
+                            [key]: String(data.response || "").slice(0, 96) || "Unavailable",
+                        }));
+                    } catch {
+                        setWidgets(prev => ({ ...prev, [key]: "Unavailable" }));
+                    }
+                };
+
+                commands.forEach(fetchWidget);
             }, []);
 
             useEffect(() => {
@@ -649,6 +683,12 @@
                 { label: "Route", value: (lastRoute.route || "standby").toUpperCase(), accent: "text-amber-200" },
                 { label: "Clock", value: homeClock || "--:--", accent: "text-white" },
             ];
+            const widgetCards = [
+                { label: "Battery", value: widgets.battery, accent: "text-emerald-200" },
+                { label: "UTC", value: widgets.utc, accent: "text-cyan-200" },
+                { label: "Clipboard", value: widgets.clipboard, accent: "text-white" },
+                { label: "Location", value: widgets.location, accent: "text-amber-200" },
+            ];
 
             return (
                 <div className="app-shell">
@@ -729,6 +769,17 @@
                                                 <div key={item.label} className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
                                                     <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.label}</div>
                                                     <div className={`mt-2 text-lg font-bold tracking-[-0.03em] ${item.accent}`}>{item.value}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="surface-card wide">
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Persistent Widgets</div>
+                                        <div className="mt-3 grid grid-cols-2 gap-3">
+                                            {widgetCards.map((item) => (
+                                                <div key={item.label} className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                                    <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.label}</div>
+                                                    <div className={`mt-2 text-sm font-semibold leading-6 ${item.accent}`}>{item.value}</div>
                                                 </div>
                                             ))}
                                         </div>
@@ -1023,6 +1074,16 @@
                                         </button>
                                     ))}
                                 </div>
+                                <div className="mt-4 grid gap-3">
+                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Battery Widget</div>
+                                        <div className="mt-2 text-sm font-semibold text-emerald-200">{widgets.battery}</div>
+                                    </div>
+                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Location Widget</div>
+                                        <div className="mt-2 text-sm font-semibold text-amber-200">{widgets.location}</div>
+                                    </div>
+                                </div>
                             </section>
                         )}
 
@@ -1051,6 +1112,12 @@
                                             <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
                                         </button>
                                     ))}
+                                </div>
+                                <div className="mt-4 grid gap-3">
+                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">UTC Widget</div>
+                                        <div className="mt-2 text-sm font-semibold text-cyan-200">{widgets.utc}</div>
+                                    </div>
                                 </div>
                             </section>
                         )}
@@ -1086,6 +1153,10 @@
                                         <div className="text-sm font-bold text-white">Store Launcher Preference</div>
                                         <div className="mt-1 text-xs text-slate-400">Reinforce current UI direction as memory.</div>
                                     </button>
+                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Clipboard Widget</div>
+                                        <div className="mt-2 text-sm font-semibold text-white">{widgets.clipboard}</div>
+                                    </div>
                                 </div>
                             </section>
                         )}
