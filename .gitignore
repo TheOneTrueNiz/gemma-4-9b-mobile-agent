@@ -30,3 +30,7 @@ Thumbs.db
 .vscode/
 .idea/
 bridge.py
+.gradle/
+local.properties
+app/build/
+build/

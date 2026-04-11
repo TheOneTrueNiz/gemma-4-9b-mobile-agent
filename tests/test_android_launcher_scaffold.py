@@ -1,0 +1,49 @@
+from pathlib import Path
+import unittest
+import xml.etree.ElementTree as ET
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class AndroidLauncherScaffoldTests(unittest.TestCase):
+    def test_gradle_project_files_exist(self):
+        for rel in [
+            "settings.gradle.kts",
+            "build.gradle.kts",
+            "gradle.properties",
+            "app/build.gradle.kts",
+            "app/src/main/AndroidManifest.xml",
+            "app/src/main/java/dev/niz/gemmalauncher/MainActivity.kt",
+        ]:
+            self.assertTrue((ROOT / rel).exists(), rel)
+
+    def test_manifest_declares_launcher_home_activity(self):
+        manifest_path = ROOT / "app/src/main/AndroidManifest.xml"
+        root = ET.fromstring(manifest_path.read_text())
+        ns = {"android": "http://schemas.android.com/apk/res/android"}
+
+        categories = []
+        for category in root.findall(".//category"):
+            name = category.attrib.get("{http://schemas.android.com/apk/res/android}name")
+            if name:
+                categories.append(name)
+
+        self.assertIn("android.intent.category.HOME", categories)
+        self.assertIn("android.intent.category.DEFAULT", categories)
+        self.assertIn("android.intent.category.LAUNCHER", categories)
+
+        permissions = [
+            item.attrib.get("{http://schemas.android.com/apk/res/android}name")
+            for item in root.findall("uses-permission")
+        ]
+        self.assertIn("android.permission.INTERNET", permissions)
+
+    def test_launcher_targets_local_backend(self):
+        activity = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/MainActivity.kt").read_text()
+        self.assertIn("http://127.0.0.1:1337/chat", activity)
+        self.assertIn("android.intent.category.HOME", (ROOT / "app/src/main/AndroidManifest.xml").read_text())
+
+
+if __name__ == "__main__":
+    unittest.main()

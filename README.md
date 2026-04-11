@@ -43,6 +43,7 @@ Recent addition: **MemSpire** hierarchical memory system for persistent context 
 ### Project Structure
 
 gemma-4-9b-mobile-agent/
+├── app/              # Native Android launcher app (chat-first home screen)
 ├── backend/          # Server, llama-server integration, routing logic
 ├── tools/            # Termux-API wrappers (torch, vibrate, location, etc.)
 ├── models/           # Put your GGUF files here (not tracked)
@@ -87,8 +88,31 @@ Current Status
 
 This is early but functional. The proposer-critic loop + fast-path router already makes it more trustworthy than most tiny agents. MemSpire integration landed yesterday.
 
+### Native Launcher Direction
+
+The repo now also contains a real Android launcher app scaffold in `app/`.
+
+Design target:
+- the launcher is the primary interaction shell
+- the home screen is the chat UI
+- the agent sits between the user and the hardware
+- the existing Python backend stays the local agent service on `127.0.0.1:1337`
+
+Current launcher scaffold includes:
+- `HOME` / default-launcher intent filter
+- chat-first Compose home surface
+- app drawer driven by installed launcher activities
+- agent / phone / debug overlays
+- localhost `/chat` client for the existing backend
+
+To turn it into an installable launcher, open the repo as an Android Studio project and build the `app` module.
+
+Validation:
+```bash
+python -m unittest discover -s tests -v
+```
+
 Tests are in the root if you want to poke around.
 
 License
 MIT
-
