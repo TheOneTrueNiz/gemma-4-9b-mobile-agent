@@ -112,8 +112,8 @@
         }
 
         .chat-container {
-            height: calc(100vh - 310px);
-            min-height: 360px;
+            height: calc(100vh - 300px);
+            min-height: 420px;
             overflow-y: auto;
             padding-right: 2px;
         }
@@ -124,35 +124,61 @@
             z-index: 20;
         }
 
-        .launcher-rail {
-            position: fixed;
-            left: 50%;
-            bottom: 124px;
-            z-index: 40;
-            width: min(428px, calc(100vw - 20px));
-            transform: translateX(-50%);
+        .top-console.compact {
+            padding-bottom: 12px;
+        }
+
+        .layer-strip {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
+            gap: 8px;
         }
 
-        .rail-button {
-            border-radius: 22px;
-            border: 1px solid rgba(139, 208, 255, 0.18);
-            background: linear-gradient(180deg, rgba(11, 24, 34, 0.96), rgba(7, 16, 23, 0.96));
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-            backdrop-filter: blur(18px);
-            padding: 14px 12px;
+        .layer-node {
+            border-radius: 18px;
+            border: 1px solid rgba(139, 208, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            padding: 10px 12px;
+        }
+
+        .layer-node.active {
+            border-color: rgba(110, 231, 210, 0.34);
+            background: rgba(110, 231, 210, 0.08);
+        }
+
+        .tab-bar {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .tab-button {
+            border-radius: 18px;
+            border: 1px solid rgba(139, 208, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            padding: 12px 10px;
             text-align: left;
-            transition: transform 160ms ease, border-color 160ms ease;
+            transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
         }
 
-        .rail-button:hover {
-            border-color: rgba(110, 231, 210, 0.35);
+        .tab-button.active {
+            border-color: rgba(110, 231, 210, 0.34);
+            background: rgba(110, 231, 210, 0.1);
         }
 
-        .rail-button:active {
-            transform: scale(0.97);
+        .tab-button:active {
+            transform: scale(0.98);
+        }
+
+        .page-stack {
+            display: grid;
+            gap: 14px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
         }
 
         .sheet-scrim {
@@ -190,6 +216,12 @@
         }
 
         .sheet-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .drawer-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 12px;
@@ -353,6 +385,10 @@
             z-index: 45;
         }
 
+        .command-bar.compact {
+            margin-top: 10px;
+        }
+
         .send-button {
             background: linear-gradient(135deg, #6ee7d2, #6bb8ff);
             color: #031019;
@@ -418,18 +454,15 @@
             }
 
             .chat-container {
-                height: calc(100vh - 286px);
-                min-height: 320px;
+                height: calc(100vh - 280px);
+                min-height: 380px;
             }
 
-            .launcher-rail {
-                width: calc(100vw - 16px);
-                bottom: 110px;
-                gap: 8px;
-            }
-
-            .rail-button {
-                padding: 12px 10px;
+            .tab-bar,
+            .layer-strip,
+            .summary-grid,
+            .drawer-grid {
+                grid-template-columns: 1fr;
             }
 
             .bottom-sheet {
@@ -481,7 +514,7 @@
             const [showTrace, setShowTrace] = useState(true);
             const [traceFilter, setTraceFilter] = useState("all");
             const [activeSheet, setActiveSheet] = useState(null);
-            const [surfaceMode, setSurfaceMode] = useState("home");
+            const [activeTab, setActiveTab] = useState("chat");
             const [homeClock, setHomeClock] = useState("");
             const [widgets, setWidgets] = useState({
                 battery: { value: "Loading...", loading: true, refreshedAt: null, refreshedAtMs: null },
@@ -636,36 +669,6 @@
                 device: quickActions.filter(action => action.group === "device"),
                 utility: quickActions.filter(action => action.group === "utility"),
             };
-            const appTiles = [
-                {
-                    key: "device",
-                    title: "Device Deck",
-                    subtitle: "Battery, location, clipboard, torch",
-                    badge: "OPS",
-                    command: "battery",
-                },
-                {
-                    key: "utility",
-                    title: "Utility Lab",
-                    subtitle: "Math, time, conversion, text tools",
-                    badge: "TOOLS",
-                    command: "convert 5 miles to km",
-                },
-                {
-                    key: "memory",
-                    title: "Memory Vault",
-                    subtitle: "Recall and reinforce stored context",
-                    badge: "MEM",
-                    command: "recall what you know about this project",
-                },
-                {
-                    key: "research",
-                    title: "Research Port",
-                    subtitle: "Search the live web from the launcher",
-                    badge: "WEB",
-                    command: "search the web for gemma mobile agent news",
-                },
-            ];
 
             const visibleTrace = (trace) => {
                 if (!trace || traceFilter === "all") return trace || [];
@@ -691,14 +694,6 @@
                     };
                     return updated;
                 });
-            };
-
-            const toggleSheet = (key) => {
-                setActiveSheet(prev => prev === key ? null : key);
-            };
-
-            const openTileSheet = (key) => {
-                setActiveSheet(`tile:${key}`);
             };
 
             const getWidgetStatusMeta = (widget) => {
@@ -733,7 +728,7 @@
             const syncingWidgetCount = Object.values(widgets).filter(widget => widget.loading).length;
             const homeHighlights = [
                 { label: "Runtime", value: status.actor_online ? "ONLINE" : "OFFLINE", accent: "text-emerald-300" },
-                { label: "Mode", value: surfaceMode.toUpperCase(), accent: "text-cyan-200" },
+                { label: "Focus", value: activeTab.toUpperCase(), accent: "text-cyan-200" },
                 { label: "Route", value: (lastRoute.route || "standby").toUpperCase(), accent: "text-amber-200" },
                 { label: "Clock", value: homeClock || "--:--", accent: "text-white" },
             ];
@@ -750,11 +745,29 @@
                 { key: "location", label: "Location", accent: "text-amber-200" },
             ];
             const recentTurns = messages.filter(m => m.user).slice(-3).reverse();
+            const navTabs = [
+                { key: "chat", badge: "USER", title: "Chat", subtitle: "Primary control surface" },
+                { key: "agent", badge: "AGENT", title: "Agent", subtitle: "Memory and execution state" },
+                { key: "phone", badge: "PHONE", title: "Phone", subtitle: "Device widgets and actions" },
+                { key: "debug", badge: "OPS", title: "Debug", subtitle: "Trace and observability" },
+            ];
+            const appDrawerGroups = [
+                { key: "device", title: "Device Apps", actions: groupedActions.device },
+                { key: "utility", title: "Utility Apps", actions: groupedActions.utility },
+                { key: "agent", title: "Agent Actions", actions: [
+                    { glyph: "09", label: "Recall Context", hint: "Project memory", cmd: "recall what you know about this project" },
+                    { glyph: "10", label: "Store Preference", hint: "Remember current launcher direction", cmd: "remember that the launcher should stay chat-first with agent mediation" },
+                ]},
+                { key: "research", title: "Research Apps", actions: [
+                    { glyph: "11", label: "Gemma News", hint: "Live web search", cmd: "search the web for gemma mobile agent news" },
+                    { glyph: "12", label: "Device Stack", hint: "OnePlus + Termux ecosystem", cmd: "search the web for oneplus 12 termux llama.cpp" },
+                ]},
+            ];
 
             return (
                 <div className="app-shell">
                     <div className="space-y-4">
-                        <section className="glass-panel rounded-[30px] p-4 stagger top-console">
+                        <section className="glass-panel rounded-[30px] p-4 stagger top-console compact">
                             <div className="flex items-start justify-between gap-4">
                                 <div>
                                     <div className="chip mono text-[10px] text-cyan-100">
@@ -762,8 +775,8 @@
                                         {status.actor_online ? "Actor Online" : "Actor Offline"}
                                     </div>
                                     <h1 className="mt-4 text-3xl font-bold tracking-[-0.04em] text-white">GEMMA MOBILE</h1>
-                                    <p className="mt-2 max-w-[18rem] text-sm leading-6 text-slate-300">
-                                        Local agent shell for phone control, deterministic utilities, memory, and traced execution.
+                                    <p className="mt-2 max-w-[20rem] text-sm leading-6 text-slate-300">
+                                        User over agent over phone. Chat is the home surface. The agent mediates tools, memory, and apps.
                                     </p>
                                 </div>
                                 <div className="glass-strong rounded-[22px] px-4 py-3 text-right">
@@ -774,139 +787,181 @@
                                     </div>
                                 </div>
                             </div>
-                            <div className="mt-4 flex flex-wrap gap-2">
-                                <button
-                                    onClick={() => setSurfaceMode("home")}
-                                    className="chip mono text-[10px] text-white"
-                                    style={surfaceMode === "home" ? { background: "rgba(110, 231, 210, 0.18)", borderColor: "rgba(110, 231, 210, 0.32)" } : {}}
-                                >
-                                    Home Surface
-                                </button>
-                                <button
-                                    onClick={() => setSurfaceMode("chat")}
-                                    className="chip mono text-[10px] text-white"
-                                    style={surfaceMode === "chat" ? { background: "rgba(107, 184, 255, 0.18)", borderColor: "rgba(107, 184, 255, 0.32)" } : {}}
-                                >
-                                    Chat Stream
-                                </button>
+                            <div className="layer-strip mt-4">
+                                <div className="layer-node">
+                                    <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">User</div>
+                                    <div className="mt-2 text-sm font-semibold text-white">Intent and chat</div>
+                                </div>
+                                <div className="layer-node active">
+                                    <div className="mono text-[10px] uppercase tracking-[0.18em] text-cyan-200">Agent</div>
+                                    <div className="mt-2 text-sm font-semibold text-white">Mediation layer</div>
+                                </div>
+                                <div className="layer-node">
+                                    <div className="mono text-[10px] uppercase tracking-[0.18em] text-amber-200">Phone</div>
+                                    <div className="mt-2 text-sm font-semibold text-white">Apps and device</div>
+                                </div>
+                            </div>
+                            <div className="mt-4 tab-bar">
+                                {navTabs.map((tab) => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => setActiveTab(tab.key)}
+                                        className={`tab-button ${activeTab === tab.key ? "active" : ""}`}
+                                    >
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{tab.badge}</div>
+                                        <div className="mt-2 text-sm font-bold text-white">{tab.title}</div>
+                                        <div className="mt-1 text-xs text-slate-400">{tab.subtitle}</div>
+                                    </button>
+                                ))}
                             </div>
                             <div className="mt-4 flex flex-wrap gap-2">
                                 {launcherStatusChips.map((chip) => (
                                     <span key={chip.label} className={`chip mono text-[10px] ${chip.accent}`} style={chip.style}>{chip.label}</span>
                                 ))}
+                                <button onClick={() => setActiveSheet("apps")} className="chip mono text-[10px] text-white">Open App Drawer</button>
                             </div>
                         </section>
 
-                        {surfaceMode === "home" && (
+                        {activeTab === "chat" && (
                             <section className="glass-panel rounded-[28px] p-4 stagger-2">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Launcher Surface</div>
-                                        <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Agent Home</div>
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Home Surface</div>
+                                        <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Chat Home</div>
+                                    </div>
+                                    <button onClick={() => setActiveSheet("apps")} className="chip mono text-[10px] text-white">Apps</button>
+                                </div>
+                                <div className="summary-grid mt-4">
+                                    {homeHighlights.map((item) => (
+                                        <div key={item.label} className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                            <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.label}</div>
+                                            <div className={`mt-2 text-lg font-bold tracking-[-0.03em] ${item.accent}`}>{item.value}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                    <button onClick={() => sendMessage("battery")} className="chip mono text-[10px] text-white">Battery</button>
+                                    <button onClick={() => sendMessage("what time is it in utc")} className="chip mono text-[10px] text-white">UTC</button>
+                                    <button onClick={() => sendMessage("get location")} className="chip mono text-[10px] text-white">Location</button>
+                                    <button onClick={() => sendMessage("recall what you know about this project")} className="chip mono text-[10px] text-white">Recall</button>
+                                </div>
+                            </section>
+                        )}
+
+                        {activeTab === "agent" && (
+                            <section className="glass-panel rounded-[28px] p-4 stagger-2 page-stack">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Agent Layer</div>
+                                        <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Memory And Runtime</div>
                                     </div>
                                     <div className="mono text-[11px] uppercase tracking-[0.16em] text-slate-400">Middle layer active</div>
                                 </div>
-                                <div className="home-grid mt-4">
-                                    <div className="surface-card wide">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Runtime Snapshot</div>
-                                        <div className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white">
-                                            {lastMessage?.mode === "pending" ? "Resolving task" : "Standing by"}
-                                        </div>
-                                        <div className="mt-2 text-sm leading-6 text-slate-300">
-                                            {lastMessage?.assistant || "No prior turn yet."}
-                                        </div>
+                                <div className="surface-card">
+                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Runtime Snapshot</div>
+                                    <div className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white">
+                                        {lastMessage?.mode === "pending" ? "Resolving task" : "Standing by"}
                                     </div>
-                                    <div className="surface-card wide">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">App Layer</div>
-                                        <div className="app-grid mt-3">
-                                            {appTiles.map((tile) => (
-                                                <button key={tile.key} onClick={() => openTileSheet(tile.key)} className="app-tile">
-                                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{tile.badge}</div>
-                                                    <div className="mt-3 text-xl font-bold tracking-[-0.03em] text-white">{tile.title}</div>
-                                                    <div className="mt-2 text-sm leading-6 text-slate-300">{tile.subtitle}</div>
-                                                </button>
-                                            ))}
-                                        </div>
+                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                        {lastMessage?.assistant || "No prior turn yet."}
                                     </div>
-                                    <div className="surface-card wide">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Ambient Layer</div>
-                                        <div className="mt-3 grid grid-cols-2 gap-3">
-                                            {homeHighlights.map((item) => (
-                                                <div key={item.label} className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
-                                                    <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.label}</div>
-                                                    <div className={`mt-2 text-lg font-bold tracking-[-0.03em] ${item.accent}`}>{item.value}</div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="surface-card wide">
-                                        <div className="flex items-center justify-between">
-                                            <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Persistent Widgets</div>
-                                            <button onClick={refreshAllWidgets} className="chip mono text-[10px] text-white">Refresh Widgets</button>
-                                        </div>
-                                        <div className="mt-3 grid grid-cols-2 gap-3">
-                                            {widgetCards.map((item) => (
-                                                <div key={item.label} className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
-                                                    <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.label}</div>
-                                                    <div className={`mt-2 text-sm font-semibold leading-6 ${item.accent}`}>
-                                                        {widgets[item.key].loading ? "Refreshing..." : widgets[item.key].value}
-                                                    </div>
-                                                    {renderWidgetMeta(widgets[item.key])}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="surface-card wide">
+                                </div>
+                                <div className="surface-card">
+                                    <div className="flex items-center justify-between">
                                         <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Recent Activity</div>
-                                        <div className="mt-3 grid gap-2">
-                                            {recentTurns.length === 0 && (
-                                                <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3 text-sm text-slate-400">
-                                                    No recent launcher activity yet.
-                                                </div>
-                                            )}
-                                            {recentTurns.map((turn, idx) => (
-                                                <div key={idx} className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
-                                                    <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{turn.mode || "agentic"}</div>
-                                                    <div className="mt-2 text-sm font-semibold text-white">{turn.user}</div>
-                                                    <div className="mt-1 text-xs leading-5 text-slate-400">{turn.assistant}</div>
-                                                </div>
-                                            ))}
+                                        <button onClick={() => sendMessage("remember that the launcher should keep chat primary and agent mediated")} className="chip mono text-[10px] text-white">Remember</button>
+                                    </div>
+                                    <div className="mt-3 grid gap-2">
+                                        {recentTurns.length === 0 && (
+                                            <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3 text-sm text-slate-400">
+                                                No recent activity yet.
+                                            </div>
+                                        )}
+                                        {recentTurns.map((turn, idx) => (
+                                            <div key={idx} className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
+                                                <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{turn.mode || "agentic"}</div>
+                                                <div className="mt-2 text-sm font-semibold text-white">{turn.user}</div>
+                                                <div className="mt-1 text-xs leading-5 text-slate-400">{turn.assistant}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </section>
+                        )}
+
+                        {activeTab === "phone" && (
+                            <section className="glass-panel rounded-[28px] p-4 stagger-2 page-stack">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Phone Layer</div>
+                                        <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Device Surface</div>
+                                    </div>
+                                    <button onClick={refreshAllWidgets} className="chip mono text-[10px] text-white">Refresh Widgets</button>
+                                </div>
+                                <div className="summary-grid">
+                                    {widgetCards.map((item) => (
+                                        <div key={item.label} className="surface-card">
+                                            <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.label}</div>
+                                            <div className={`mt-2 text-sm font-semibold leading-6 ${item.accent}`}>
+                                                {widgets[item.key].loading ? "Refreshing..." : widgets[item.key].value}
+                                            </div>
+                                            {renderWidgetMeta(widgets[item.key])}
                                         </div>
+                                    ))}
+                                </div>
+                                <div className="summary-grid">
+                                    {groupedActions.device.concat(groupedActions.utility).map((action) => (
+                                        <button key={action.label} onClick={() => sendMessage(action.cmd)} className="action-card min-w-0">
+                                            <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
+                                            <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
+                                            <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {activeTab === "debug" && (
+                            <section className="glass-panel rounded-[28px] p-4 stagger-2 page-stack">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Observability</div>
+                                        <div className="mt-2 text-lg font-bold tracking-[-0.03em] text-white">Operator Deck</div>
+                                    </div>
+                                    <button onClick={() => setShowTrace(prev => !prev)} className="chip mono text-[10px] text-white">
+                                        {showTrace ? "Hide Debug" : "Show Debug"}
+                                    </button>
+                                </div>
+                                <div className="surface-card">
+                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Trace Filter</div>
+                                    <select
+                                        value={traceFilter}
+                                        onChange={(e) => setTraceFilter(e.target.value)}
+                                        className="mt-3 w-full mono rounded-[18px] border border-cyan-300/20 bg-slate-950/60 px-3 py-3 text-[10px] uppercase tracking-[0.16em] text-slate-200 outline-none"
+                                    >
+                                        <option value="all">All</option>
+                                        <option value="request">Request</option>
+                                        <option value="fast_path_tool">Fast Path</option>
+                                        <option value="fast_path_search">Fast Search</option>
+                                        <option value="state_transition">State</option>
+                                        <option value="runtime_budget">Budget</option>
+                                        <option value="actor">Actor</option>
+                                        <option value="tool_parse">Tool Parse</option>
+                                        <option value="critic">Critic</option>
+                                        <option value="tool_execution">Tool Exec</option>
+                                        <option value="direct_fallback">Fallback</option>
+                                        <option value="answer_cleanup">Cleanup</option>
+                                        <option value="exception">Exception</option>
+                                    </select>
+                                </div>
+                                <div className="summary-grid">
+                                    <div className="surface-card">
+                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Trace</div>
+                                        <div className="mt-2 text-lg font-bold text-white">{showTrace ? "VISIBLE" : "HIDDEN"}</div>
                                     </div>
                                     <div className="surface-card">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Device Group</div>
-                                        <div className="mt-3 grid gap-2">
-                                            {groupedActions.device.slice(0, 2).map((action) => (
-                                                <button key={action.label} onClick={() => sendMessage(action.cmd)} className="app-pill">
-                                                    <div className="text-sm font-bold text-white">{action.label}</div>
-                                                    <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="surface-card">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Utility Group</div>
-                                        <div className="mt-3 grid gap-2">
-                                            {groupedActions.utility.slice(0, 2).map((action) => (
-                                                <button key={action.label} onClick={() => sendMessage(action.cmd)} className="app-pill">
-                                                    <div className="text-sm font-bold text-white">{action.label}</div>
-                                                    <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="surface-card wide">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Suggested Ops</div>
-                                        <div className="mt-3 grid gap-2">
-                                            <button onClick={() => sendMessage("what time is it in utc")} className="app-pill">
-                                                <div className="text-sm font-bold text-white">Sync Time Layer</div>
-                                                <div className="mt-1 text-xs text-slate-400">Check current UTC context for the runtime.</div>
-                                            </button>
-                                            <button onClick={() => sendMessage("battery")} className="app-pill">
-                                                <div className="text-sm font-bold text-white">Inspect Device Power</div>
-                                                <div className="mt-1 text-xs text-slate-400">Pull a fresh battery snapshot without leaving the launcher surface.</div>
-                                            </button>
-                                        </div>
+                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Turns</div>
+                                        <div className="mt-2 text-lg font-bold text-white">{messages.length - 1}</div>
                                     </div>
                                 </div>
                             </section>
@@ -921,7 +976,7 @@
                                 <div className="mono text-[11px] uppercase tracking-[0.16em] text-slate-400">{messages.length - 1} turns</div>
                             </div>
 
-                            <main className={`chat-container mt-4 ${surfaceMode === "home" ? "opacity-75" : ""}`}>
+                            <main className="chat-container mt-4">
                                 {messages.map((m, i) => (
                                     <div key={i}>
                                         {m.user && (
@@ -990,354 +1045,45 @@
                             </main>
                         </section>
 
-                        <div className="launcher-rail">
-                            <button onClick={() => toggleSheet("status")} className="rail-button">
-                                <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Status</div>
-                                <div className="mt-2 text-sm font-bold text-white">System Sheet</div>
-                                <div className="mt-1 text-xs text-slate-400">{status.actor_online ? "Runtime online" : "Offline"}</div>
-                            </button>
-                            <button onClick={() => toggleSheet("actions")} className="rail-button">
-                                <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Launch</div>
-                                <div className="mt-2 text-sm font-bold text-white">Command Deck</div>
-                                <div className="mt-1 text-xs text-slate-400">Grouped actions and utilities</div>
-                            </button>
-                            <button onClick={() => toggleSheet("debug")} className="rail-button">
-                                <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Debug</div>
-                                <div className="mt-2 text-sm font-bold text-white">Operator Sheet</div>
-                                <div className="mt-1 text-xs text-slate-400">{showTrace ? "Trace visible" : "Trace hidden"}</div>
-                            </button>
-                        </div>
-
                         {activeSheet && <div className="sheet-scrim" onClick={() => setActiveSheet(null)}></div>}
 
-                        {activeSheet === "status" && (
+                        {activeSheet === "apps" && (
                             <section className="bottom-sheet">
                                 <div className="sheet-handle"></div>
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Status Drawer</div>
-                                        <div className="mt-2 text-xl font-bold tracking-[-0.03em] text-white">System Sheet</div>
+                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Launcher</div>
+                                        <div className="mt-2 text-xl font-bold tracking-[-0.03em] text-white">App Drawer</div>
                                     </div>
                                     <button onClick={() => setActiveSheet(null)} className="chip mono text-[10px] text-white">Close</button>
                                 </div>
-                                <div className="sheet-grid mt-4">
-                                    <div className="sheet-card">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Mission Feed</div>
-                                        <div className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white">
-                                            {lastMessage?.mode === "pending" ? "Running request" : "Ready for next task"}
+                                <div className="mt-4 page-stack">
+                                    {appDrawerGroups.map((group) => (
+                                        <div key={group.key} className="surface-card">
+                                            <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{group.title}</div>
+                                            <div className="drawer-grid mt-3">
+                                                {group.actions.map((action) => (
+                                                    <button
+                                                        key={action.label}
+                                                        onClick={() => {
+                                                            sendMessage(action.cmd);
+                                                            setActiveSheet(null);
+                                                        }}
+                                                        className="action-card min-w-0"
+                                                    >
+                                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
+                                                        <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
+                                                        <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
-                                        <div className="mt-2 text-sm leading-6 text-slate-300">
-                                            {loading ? "The runtime is processing the current turn." : "Fast paths, deterministic tools, and agentic traces are live."}
-                                        </div>
-                                    </div>
-                                    <div className="sheet-card">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Engine Deck</div>
-                                        <div className="mt-3 text-base font-bold text-white">{status.actor_model}</div>
-                                        <div className="mt-2 mono text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                                            {showTrace ? "Trace Visible" : "Trace Hidden"}
-                                        </div>
-                                        <div className="mt-3 chip mono text-[10px] text-white">
-                                            {status.actor_online ? "Local Runtime Ready" : "Engine Offline"}
-                                        </div>
-                                        <button onClick={refreshAllWidgets} className="mt-3 chip mono text-[10px] text-white">Refresh Widgets</button>
-                                    </div>
-                                </div>
-                            </section>
-                        )}
-
-                        {activeSheet === "actions" && (
-                            <section className="bottom-sheet">
-                                <div className="sheet-handle"></div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Quick Launch</div>
-                                        <div className="mt-2 text-xl font-bold tracking-[-0.03em] text-white">Command Deck</div>
-                                    </div>
-                                    <button onClick={() => setActiveSheet(null)} className="chip mono text-[10px] text-white">Close</button>
-                                </div>
-                                <div className="mt-4 grid grid-cols-2 gap-3">
-                                    <div className="col-span-2">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Device Actions</div>
-                                        <div className="mt-3 grid grid-cols-2 gap-3">
-                                            {groupedActions.device.map((action, i) => (
-                                                <button
-                                                    key={i}
-                                                    onClick={() => {
-                                                        sendMessage(action.cmd);
-                                                        setActiveSheet(null);
-                                                    }}
-                                                    className="action-card min-w-0"
-                                                >
-                                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
-                                                    <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
-                                                    <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="col-span-2 mt-2">
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Utility Actions</div>
-                                        <div className="mt-3 grid grid-cols-2 gap-3">
-                                            {groupedActions.utility.map((action, i) => (
-                                                <button
-                                                    key={i}
-                                                    onClick={() => {
-                                                        sendMessage(action.cmd);
-                                                        setActiveSheet(null);
-                                                    }}
-                                                    className="action-card min-w-0"
-                                                >
-                                                    <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
-                                                    <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
-                                                    <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
-                        )}
-
-                        {activeSheet === "debug" && (
-                            <section className="bottom-sheet">
-                                <div className="sheet-handle"></div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Operator Controls</div>
-                                        <div className="mt-2 text-xl font-bold tracking-[-0.03em] text-white">Debug Drawer</div>
-                                    </div>
-                                    <button onClick={() => setActiveSheet(null)} className="chip mono text-[10px] text-white">Close</button>
-                                </div>
-                                <div className="mt-4 flex flex-col gap-3">
-                                    <button
-                                        onClick={() => setShowTrace(prev => !prev)}
-                                        className="chip mono text-[10px] text-white justify-center"
-                                    >
-                                        {showTrace ? "Hide Debug" : "Show Debug"}
-                                    </button>
-                                    <select
-                                        value={traceFilter}
-                                        onChange={(e) => setTraceFilter(e.target.value)}
-                                        className="mono rounded-full border border-cyan-300/20 bg-slate-950/60 px-3 py-3 text-[10px] uppercase tracking-[0.16em] text-slate-200 outline-none"
-                                    >
-                                        <option value="all">All</option>
-                                        <option value="request">Request</option>
-                                        <option value="fast_path_tool">Fast Path</option>
-                                        <option value="fast_path_search">Fast Search</option>
-                                        <option value="state_transition">State</option>
-                                        <option value="runtime_budget">Budget</option>
-                                        <option value="actor">Actor</option>
-                                        <option value="tool_parse">Tool Parse</option>
-                                        <option value="critic">Critic</option>
-                                        <option value="tool_execution">Tool Exec</option>
-                                        <option value="direct_fallback">Fallback</option>
-                                        <option value="answer_cleanup">Cleanup</option>
-                                        <option value="exception">Exception</option>
-                                    </select>
-                                </div>
-                            </section>
-                        )}
-
-                        {activeSheet === "tile:device" && (
-                            <section className="bottom-sheet">
-                                <div className="sheet-handle"></div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Device Deck</div>
-                                        <div className="mt-2 text-xl font-bold tracking-[-0.03em] text-white">Phone Controls</div>
-                                    </div>
-                                    <button onClick={() => setActiveSheet(null)} className="chip mono text-[10px] text-white">Close</button>
-                                </div>
-                                <div className="mt-4 grid grid-cols-2 gap-3">
-                                    {groupedActions.device.map((action, i) => (
-                                        <button
-                                            key={i}
-                                            onClick={() => {
-                                                sendMessage(action.cmd);
-                                                setActiveSheet(null);
-                                            }}
-                                            className="action-card min-w-0"
-                                        >
-                                            <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
-                                            <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
-                                            <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
-                                        </button>
                                     ))}
                                 </div>
-                                <div className="mt-4 grid gap-3">
-                                    <div className="flex justify-end">
-                                        <button
-                                            onClick={() => fetchWidget({ key: "battery", message: "battery" })}
-                                            className="chip mono text-[10px] text-white"
-                                        >
-                                            Refresh Battery
-                                        </button>
-                                    </div>
-                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
-                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Battery Widget</div>
-                                        <div className="mt-2 text-sm font-semibold text-emerald-200">
-                                            {widgets.battery.loading ? "Refreshing..." : widgets.battery.value}
-                                        </div>
-                                        {renderWidgetMeta(widgets.battery)}
-                                    </div>
-                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
-                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Location Widget</div>
-                                        <div className="mt-2 text-sm font-semibold text-amber-200">
-                                            {widgets.location.loading ? "Refreshing..." : widgets.location.value}
-                                        </div>
-                                        {renderWidgetMeta(widgets.location)}
-                                    </div>
-                                </div>
                             </section>
                         )}
 
-                        {activeSheet === "tile:utility" && (
-                            <section className="bottom-sheet">
-                                <div className="sheet-handle"></div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Utility Lab</div>
-                                        <div className="mt-2 text-xl font-bold tracking-[-0.03em] text-white">Deterministic Tools</div>
-                                    </div>
-                                    <button onClick={() => setActiveSheet(null)} className="chip mono text-[10px] text-white">Close</button>
-                                </div>
-                                <div className="mt-4 grid grid-cols-2 gap-3">
-                                    {groupedActions.utility.map((action, i) => (
-                                        <button
-                                            key={i}
-                                            onClick={() => {
-                                                sendMessage(action.cmd);
-                                                setActiveSheet(null);
-                                            }}
-                                            className="action-card min-w-0"
-                                        >
-                                            <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">{action.glyph}</div>
-                                            <div className="mt-3 text-base font-bold tracking-[-0.03em] text-white">{action.label}</div>
-                                            <div className="mt-1 text-xs text-slate-400">{action.hint}</div>
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="mt-4 grid gap-3">
-                                    <div className="flex justify-end">
-                                        <button
-                                            onClick={() => fetchWidget({ key: "utc", message: "what time is it in utc" })}
-                                            className="chip mono text-[10px] text-white"
-                                        >
-                                            Refresh UTC
-                                        </button>
-                                    </div>
-                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
-                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">UTC Widget</div>
-                                        <div className="mt-2 text-sm font-semibold text-cyan-200">
-                                            {widgets.utc.loading ? "Refreshing..." : widgets.utc.value}
-                                        </div>
-                                        {renderWidgetMeta(widgets.utc)}
-                                    </div>
-                                </div>
-                            </section>
-                        )}
-
-                        {activeSheet === "tile:memory" && (
-                            <section className="bottom-sheet">
-                                <div className="sheet-handle"></div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Memory Vault</div>
-                                        <div className="mt-2 text-xl font-bold tracking-[-0.03em] text-white">Context Panel</div>
-                                    </div>
-                                    <button onClick={() => setActiveSheet(null)} className="chip mono text-[10px] text-white">Close</button>
-                                </div>
-                                <div className="mt-4 grid gap-3">
-                                    <button
-                                        onClick={() => {
-                                            sendMessage("recall what you know about this project");
-                                            setActiveSheet(null);
-                                        }}
-                                        className="app-pill"
-                                    >
-                                        <div className="text-sm font-bold text-white">Recall Project Context</div>
-                                        <div className="mt-1 text-xs text-slate-400">Pull relevant project memory into the chat stream.</div>
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            sendMessage("remember that this launcher surface should feel app-like and operator-first");
-                                            setActiveSheet(null);
-                                        }}
-                                        className="app-pill"
-                                    >
-                                        <div className="text-sm font-bold text-white">Store Launcher Preference</div>
-                                        <div className="mt-1 text-xs text-slate-400">Reinforce current UI direction as memory.</div>
-                                    </button>
-                                    <div className="flex justify-end">
-                                        <button
-                                            onClick={() => fetchWidget({ key: "clipboard", message: "get clipboard" })}
-                                            className="chip mono text-[10px] text-white"
-                                        >
-                                            Refresh Clipboard
-                                        </button>
-                                    </div>
-                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
-                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Clipboard Widget</div>
-                                        <div className="mt-2 text-sm font-semibold text-white">
-                                            {widgets.clipboard.loading ? "Refreshing..." : widgets.clipboard.value}
-                                        </div>
-                                        {renderWidgetMeta(widgets.clipboard)}
-                                    </div>
-                                </div>
-                            </section>
-                        )}
-
-                        {activeSheet === "tile:research" && (
-                            <section className="bottom-sheet">
-                                <div className="sheet-handle"></div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="mono text-[10px] uppercase tracking-[0.22em] text-amber-200">Research Port</div>
-                                        <div className="mt-2 text-xl font-bold tracking-[-0.03em] text-white">Live Search Panel</div>
-                                    </div>
-                                    <button onClick={() => setActiveSheet(null)} className="chip mono text-[10px] text-white">Close</button>
-                                </div>
-                                <div className="mt-4 grid gap-3">
-                                    <button
-                                        onClick={() => {
-                                            sendMessage("search the web for gemma mobile agent news");
-                                            setActiveSheet(null);
-                                        }}
-                                        className="app-pill"
-                                    >
-                                        <div className="text-sm font-bold text-white">Search Gemma News</div>
-                                        <div className="mt-1 text-xs text-slate-400">Open a live search flow from the launcher.</div>
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            sendMessage("search the web for oneplus 12 termux llama.cpp");
-                                            setActiveSheet(null);
-                                        }}
-                                        className="app-pill"
-                                    >
-                                        <div className="text-sm font-bold text-white">Search Device Stack</div>
-                                        <div className="mt-1 text-xs text-slate-400">Look for current phone-agent ecosystem info.</div>
-                                    </button>
-                                    <div className="flex justify-end">
-                                        <button
-                                            onClick={() => fetchWidget({ key: "location", message: "get location" })}
-                                            className="chip mono text-[10px] text-white"
-                                        >
-                                            Refresh Location
-                                        </button>
-                                    </div>
-                                    <div className="rounded-[18px] border border-cyan-300/10 bg-white/5 p-3">
-                                        <div className="mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Location Widget</div>
-                                        <div className="mt-2 text-sm font-semibold text-amber-200">
-                                            {widgets.location.loading ? "Refreshing..." : widgets.location.value}
-                                        </div>
-                                        {renderWidgetMeta(widgets.location)}
-                                    </div>
-                                </div>
-                            </section>
-                        )}
-
-                        <footer className="command-bar p-3">
+                        <footer className="command-bar compact p-3">
                             <div className="mb-3 flex items-center justify-between px-2">
                                 <div>
                                     <div className="mono text-[10px] uppercase tracking-[0.22em] text-cyan-200">Command Uplink</div>
