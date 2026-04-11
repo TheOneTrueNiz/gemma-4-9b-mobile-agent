@@ -52,6 +52,14 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("Search apps", ui)
         self.assertIn("LauncherDock", ui)
         self.assertIn("OverlaySheet.Apps", ui)
+        self.assertIn("Recent Apps", ui)
+        self.assertIn('listOf("open ", "launch ", "start ")', ui)
+
+    def test_launcher_uses_real_json_client_and_icons(self):
+        backend_client = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt").read_text()
+        activity = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/MainActivity.kt").read_text()
+        self.assertIn("JSONObject", backend_client)
+        self.assertIn("getIcon(0)", activity)
 
 
 if __name__ == "__main__":

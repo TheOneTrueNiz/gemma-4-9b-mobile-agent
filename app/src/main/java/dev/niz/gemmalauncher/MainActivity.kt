@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
 private fun LauncherActivityInfo.toEntry(): LauncherEntry {
     return LauncherEntry(
         label = label?.toString() ?: applicationInfo.packageName,
-        packageName = applicationInfo.packageName
+        packageName = applicationInfo.packageName,
+        icon = getIcon(0)
     )
 }

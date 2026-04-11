@@ -1,8 +1,11 @@
 package dev.niz.gemmalauncher
 
+import android.graphics.drawable.Drawable
+
 data class LauncherEntry(
     val label: String,
     val packageName: String,
+    val icon: Drawable? = null,
 )
 
 data class ChatTurn(

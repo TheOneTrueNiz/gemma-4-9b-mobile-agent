@@ -1,5 +1,6 @@
 package dev.niz.gemmalauncher
 
+import android.widget.ImageView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,6 +79,7 @@ fun LauncherApp(
     var loading by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<OverlaySheet?>(null) }
     var apps by remember { mutableStateOf(emptyList<LauncherEntry>()) }
+    val recentAppPackages = remember { mutableStateListOf<String>() }
     var traceVisible by remember { mutableStateOf(true) }
     var lastTraceSummary by remember { mutableStateOf<List<String>>(emptyList()) }
     var widgets by remember {
@@ -95,8 +98,41 @@ fun LauncherApp(
         widgets = refreshWidgets()
     }
 
+    fun noteRecentApp(entry: LauncherEntry) {
+        recentAppPackages.remove(entry.packageName)
+        recentAppPackages.add(0, entry.packageName)
+        while (recentAppPackages.size > 6) {
+            recentAppPackages.removeLast()
+        }
+    }
+
+    fun tryLaunchFromChat(message: String): Boolean {
+        val normalized = message.trim()
+        val prefixes = listOf("open ", "launch ", "start ")
+        val prefix = prefixes.firstOrNull { normalized.lowercase().startsWith(it) } ?: return false
+        val query = normalized.removePrefix(prefix).trim()
+        if (query.isBlank()) return false
+        val match = apps.firstOrNull { app ->
+            app.label.equals(query, ignoreCase = true) ||
+                app.packageName.equals(query, ignoreCase = true)
+        } ?: apps.firstOrNull { app ->
+            app.label.lowercase().contains(query.lowercase()) ||
+                app.packageName.lowercase().contains(query.lowercase())
+        }
+
+        if (match != null) {
+            noteRecentApp(match)
+            turns.add(ChatTurn(user = message, agent = "Opening ${match.label}."))
+            launchApp(match)
+        } else {
+            turns.add(ChatTurn(user = message, agent = "I couldn't find an installed app matching \"$query\". Open the app drawer and search for it."))
+        }
+        return true
+    }
+
     fun sendMessage(message: String) {
         if (message.isBlank() || loading) return
+        if (tryLaunchFromChat(message)) return
         loading = true
         turns.add(ChatTurn(user = message, agent = "Working..."))
         scope.launch {
@@ -160,7 +196,14 @@ fun LauncherApp(
             containerColor = Color(0xFF09141C)
         ) {
             when (overlay) {
-                OverlaySheet.Apps -> AppDrawerSheet(apps = apps, launchApp = launchApp)
+                OverlaySheet.Apps -> AppDrawerSheet(
+                    apps = apps,
+                    recentApps = apps.filter { it.packageName in recentAppPackages },
+                    launchApp = { entry ->
+                        noteRecentApp(entry)
+                        launchApp(entry)
+                    }
+                )
                 OverlaySheet.Agent -> AgentSheet(turns = turns, onRecall = { sendMessage("recall what you know about this project") })
                 OverlaySheet.Phone -> PhoneSheet(widgets = widgets, onRefresh = {
                     scope.launch { widgets = refreshWidgets() }
@@ -338,7 +381,11 @@ private fun CommandBar(
 }
 
 @Composable
-private fun AppDrawerSheet(apps: List<LauncherEntry>, launchApp: (LauncherEntry) -> Unit) {
+private fun AppDrawerSheet(
+    apps: List<LauncherEntry>,
+    recentApps: List<LauncherEntry>,
+    launchApp: (LauncherEntry) -> Unit
+) {
     var query by remember { mutableStateOf("") }
     val visibleApps = remember(apps, query) {
         val trimmed = query.trim().lowercase()
@@ -362,26 +409,76 @@ private fun AppDrawerSheet(apps: List<LauncherEntry>, launchApp: (LauncherEntry)
             label = { Text("Search apps") }
         )
         Spacer(modifier = Modifier.height(12.dp))
+        if (query.isBlank() && recentApps.isNotEmpty()) {
+            Text("Recent Apps", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyRowRecentApps(recentApps = recentApps, launchApp = launchApp)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         LazyVerticalGrid(columns = GridCells.Fixed(4), modifier = Modifier.height(420.dp)) {
             items(visibleApps, key = { it.packageName }) { app ->
+                AppIconTile(app = app, onClick = { launchApp(app) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun LazyRowRecentApps(recentApps: List<LauncherEntry>, launchApp: (LauncherEntry) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        recentApps.take(4).forEach { app ->
+            Card(
+                modifier = Modifier.weight(1f).clickable { launchApp(app) },
+                colors = CardDefaults.cardColors(containerColor = Color(0x44203846))
+            ) {
                 Column(
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .clickable { launchApp(app) },
+                    modifier = Modifier.fillMaxWidth().padding(10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(Color(0x332D4D5C), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(app.label.take(1), color = Color.White, fontWeight = FontWeight.Bold)
-                    }
+                    AppIcon(app = app, modifier = Modifier.size(40.dp))
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AppIconTile(app: LauncherEntry, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .padding(8.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        AppIcon(app = app, modifier = Modifier.size(52.dp))
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun AppIcon(app: LauncherEntry, modifier: Modifier = Modifier) {
+    if (app.icon != null) {
+        AndroidView(
+            factory = { context ->
+                ImageView(context).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    clipToOutline = true
+                }
+            },
+            update = { view -> view.setImageDrawable(app.icon) },
+            modifier = modifier
+                .background(Color(0x332D4D5C), CircleShape)
+                .padding(8.dp)
+        )
+    } else {
+        Box(
+            modifier = modifier.background(Color(0x332D4D5C), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(app.label.take(1), color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
 }
