@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,6 +69,11 @@ import kotlinx.coroutines.launch
 fun LauncherApp(
     appSource: () -> List<LauncherEntry>,
     usageStore: LauncherUsageStore,
+    termuxBridgeStatus: TermuxBridgeStatus,
+    refreshTermuxBridgeStatus: () -> Unit,
+    requestTermuxPermission: () -> Unit,
+    openTermux: () -> Unit,
+    controlBackend: (Boolean) -> String,
     launchApp: (LauncherEntry) -> Unit,
     launchNativeAction: (NativeLauncherAction) -> Unit,
 ) {
@@ -106,6 +112,16 @@ fun LauncherApp(
         apps = appSource()
         usageSnapshot = usageStore.snapshot()
         backendStatus = fetchBackendStatus()
+        if (!backendStatus.online && termuxBridgeStatus.canDispatchCommands) {
+            controlBackend(false)
+            for (attempt in 1..20) {
+                delay(1500)
+                backendStatus = fetchBackendStatus()
+                if (backendStatus.online) {
+                    break
+                }
+            }
+        }
         widgets = refreshWidgets(backendStatus)
     }
 
@@ -207,13 +223,52 @@ fun LauncherApp(
         }
     }
 
-    fun buildOfflineReply(status: BackendStatus): BackendReply {
+    suspend fun requestBackendStart(restart: Boolean, addTurn: Boolean): BackendStatus {
+        val userLabel = if (restart) "Restart Gemma" else "Start Gemma"
+        val bridgeMessage = controlBackend(restart)
+        refreshTermuxBridgeStatus()
+        recordDecision(
+            LauncherDecisionRecord(
+                query = userLabel,
+                route = "Launcher",
+                detail = if (restart) "Restart backend" else "Start backend",
+            )
+        )
+        if (addTurn) {
+            turns.add(ChatTurn(user = userLabel, agent = bridgeMessage))
+        }
+        lastTraceSummary = listOf(
+            "launcher: $bridgeMessage",
+            "termux: ${termuxBridgeStatus.detail}",
+        )
+        for (attempt in 1..20) {
+            delay(1500)
+            val status = refreshBackendLink(refreshWidgetsToo = true)
+            if (status.online) {
+                return status
+            }
+        }
+        return backendStatus
+    }
+
+    fun buildOfflineReply(status: BackendStatus, attemptedAutoStart: Boolean): BackendReply {
         val detail = status.detail.ifBlank { "Backend unavailable" }
+        val guidance = when {
+            !termuxBridgeStatus.termuxInstalled ->
+                "Install Termux to let the launcher manage Gemma."
+            !termuxBridgeStatus.runCommandPermissionGranted ->
+                "Grant Gemma Launcher the Termux Run Command permission, then retry."
+            attemptedAutoStart ->
+                "The launcher asked Termux to start Gemma, but the backend is still offline. Open Termux and set allow-external-apps=true in ~/.termux/termux.properties, then restart Termux."
+            else ->
+                "Tap Start Gemma or open Termux, then retry."
+        }
         return BackendReply(
-            response = "Gemma backend is offline. Start backend/main.py on 127.0.0.1:1337, then tap Refresh Link and retry.",
+            response = "Gemma backend is offline. $guidance",
             traceSummary = listOf(
                 "launcher: backend offline",
                 "detail: $detail",
+                "termux: ${termuxBridgeStatus.detail}",
             )
         )
     }
@@ -231,9 +286,14 @@ fun LauncherApp(
         loading = true
         turns.add(ChatTurn(user = message, agent = "Working..."))
         scope.launch {
-            val status = if (backendStatus.online) backendStatus else refreshBackendLink()
+            var status = if (backendStatus.online) backendStatus else refreshBackendLink()
+            var attemptedAutoStart = false
+            if (!status.online && termuxBridgeStatus.canDispatchCommands) {
+                attemptedAutoStart = true
+                status = requestBackendStart(restart = false, addTurn = false)
+            }
             if (!status.online) {
-                val reply = buildOfflineReply(status)
+                val reply = buildOfflineReply(status, attemptedAutoStart)
                 turns[turns.lastIndex] = ChatTurn(user = message, agent = reply.response)
                 lastTraceSummary = reply.traceSummary
                 loading = false
@@ -246,7 +306,7 @@ fun LauncherApp(
                     actorOnline = false,
                     detail = it.message ?: "Backend unavailable",
                 )
-                buildOfflineReply(backendStatus)
+                buildOfflineReply(backendStatus, attemptedAutoStart = false)
             }
             turns[turns.lastIndex] = ChatTurn(user = message, agent = reply.response)
             lastTraceSummary = reply.traceSummary
@@ -271,6 +331,7 @@ fun LauncherApp(
                 TopStatusBar(
                     loading = loading,
                     backendStatus = backendStatus,
+                    termuxBridgeStatus = termuxBridgeStatus,
                     lastRoute = lastDecisionRoute,
                     onAgent = { overlay = OverlaySheet.Agent },
                     onPhone = { overlay = OverlaySheet.Phone },
@@ -357,9 +418,18 @@ fun LauncherApp(
                     turns = turns,
                     decisions = recentDecisions,
                     backendStatus = backendStatus,
+                    termuxBridgeStatus = termuxBridgeStatus,
                     onRefreshBackend = {
                         scope.launch { refreshBackendLink(refreshWidgetsToo = true) }
                     },
+                    onStartBackend = {
+                        scope.launch { requestBackendStart(restart = false, addTurn = true) }
+                    },
+                    onRestartBackend = {
+                        scope.launch { requestBackendStart(restart = true, addTurn = true) }
+                    },
+                    onGrantTermuxPermission = { requestTermuxPermission() },
+                    onOpenTermux = { openTermux() },
                     onRecall = { sendMessage("recall what you know about this project") }
                 )
                 OverlaySheet.Phone -> PhoneSheet(widgets = widgets, onRefresh = {
@@ -382,6 +452,7 @@ fun LauncherApp(
 private fun TopStatusBar(
     loading: Boolean,
     backendStatus: BackendStatus,
+    termuxBridgeStatus: TermuxBridgeStatus,
     lastRoute: String?,
     onAgent: () -> Unit,
     onPhone: () -> Unit,
@@ -417,6 +488,13 @@ private fun TopStatusBar(
                         if (backendStatus.actorOnline) "Actor Ready" else "Actor Down",
                         containerColor = if (backendStatus.actorOnline) Color(0x33306A58) else Color(0x33635B2D)
                     )
+                } else {
+                    val bridgeLabel = when {
+                        !termuxBridgeStatus.termuxInstalled -> "No Termux"
+                        !termuxBridgeStatus.runCommandPermissionGranted -> "Grant Access"
+                        else -> "Bridge Ready"
+                    }
+                    StatusChip(bridgeLabel, containerColor = Color(0x33305A72))
                 }
                 if (!lastRoute.isNullOrBlank()) {
                     StatusChip("Last: $lastRoute")
@@ -940,7 +1018,12 @@ private fun AgentSheet(
     turns: List<ChatTurn>,
     decisions: List<LauncherDecisionRecord>,
     backendStatus: BackendStatus,
+    termuxBridgeStatus: TermuxBridgeStatus,
     onRefreshBackend: () -> Unit,
+    onStartBackend: () -> Unit,
+    onRestartBackend: () -> Unit,
+    onGrantTermuxPermission: () -> Unit,
+    onOpenTermux: () -> Unit,
     onRecall: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -952,7 +1035,14 @@ private fun AgentSheet(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        BackendStatusCard(status = backendStatus)
+        BackendStatusCard(
+            status = backendStatus,
+            termuxBridgeStatus = termuxBridgeStatus,
+            onStartBackend = onStartBackend,
+            onRestartBackend = onRestartBackend,
+            onGrantTermuxPermission = onGrantTermuxPermission,
+            onOpenTermux = onOpenTermux,
+        )
         Spacer(modifier = Modifier.height(12.dp))
         if (decisions.isNotEmpty()) {
             Text("Recent Decisions", color = Color(0xFF6EE7D2), fontSize = 12.sp)
@@ -1019,7 +1109,14 @@ private fun PhoneSheet(
 }
 
 @Composable
-private fun BackendStatusCard(status: BackendStatus) {
+private fun BackendStatusCard(
+    status: BackendStatus,
+    termuxBridgeStatus: TermuxBridgeStatus,
+    onStartBackend: () -> Unit,
+    onRestartBackend: () -> Unit,
+    onGrantTermuxPermission: () -> Unit,
+    onOpenTermux: () -> Unit,
+) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x44203846)),
         modifier = Modifier.fillMaxWidth()
@@ -1046,6 +1143,8 @@ private fun BackendStatusCard(status: BackendStatus) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(status.detail, color = Color(0xFFC7D9E3))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(termuxBridgeStatus.detail, color = Color(0xFF7FA4B2), fontSize = 11.sp)
             if (status.checked && status.online) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -1059,6 +1158,69 @@ private fun BackendStatusCard(status: BackendStatus) {
                     Text(model, color = Color(0xFF7FA4B2), fontSize = 11.sp)
                 }
             }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                when {
+                    !termuxBridgeStatus.termuxInstalled -> {
+                        Text(
+                            "Install Termux to let the launcher start Gemma automatically.",
+                            color = Color(0xFF7FA4B2),
+                            fontSize = 11.sp,
+                        )
+                    }
+                    !termuxBridgeStatus.runCommandPermissionGranted -> {
+                        ControlButton(
+                            label = "Grant Access",
+                            onClick = onGrantTermuxPermission,
+                            modifier = Modifier.weight(1f)
+                        )
+                        ControlButton(
+                            label = "Open Termux",
+                            onClick = onOpenTermux,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    else -> {
+                        ControlButton(
+                            label = if (status.online) "Restart Gemma" else "Start Gemma",
+                            onClick = if (status.online) onRestartBackend else onStartBackend,
+                            modifier = Modifier.weight(1f)
+                        )
+                        ControlButton(
+                            label = "Open Termux",
+                            onClick = onOpenTermux,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+            if (termuxBridgeStatus.canDispatchCommands) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "If backend start fails, open Termux and set allow-external-apps=true in ~/.termux/termux.properties, then restart Termux.",
+                    color = Color(0xFF7FA4B2),
+                    fontSize = 11.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ControlButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color(0x55305A72))
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

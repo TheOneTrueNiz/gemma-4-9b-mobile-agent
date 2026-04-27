@@ -25,14 +25,17 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "app/src/main/java/dev/niz/gemmalauncher/LauncherCatalog.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherNativeActions.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt",
+            "app/src/main/java/dev/niz/gemmalauncher/TermuxBridge.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt",
             "app/src/test/java/dev/niz/gemmalauncher/BackendClientTest.kt",
             "app/src/test/java/dev/niz/gemmalauncher/LauncherCatalogTest.kt",
             "app/src/test/java/dev/niz/gemmalauncher/LauncherResolverTest.kt",
+            "app/src/test/java/dev/niz/gemmalauncher/TermuxBridgeTest.kt",
             "tools/check_android_launcher_env.sh",
             "tools/bootstrap_android_sdk.sh",
             "tools/build_android_launcher.sh",
             "tools/install_android_launcher.sh",
+            "tools/start_backend_from_launcher.sh",
         ]:
             self.assertTrue((ROOT / rel).exists(), rel)
 
@@ -56,6 +59,10 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             for item in root.findall("uses-permission")
         ]
         self.assertIn("android.permission.INTERNET", permissions)
+        self.assertIn("com.termux.permission.RUN_COMMAND", permissions)
+
+        manifest_text = manifest_path.read_text()
+        self.assertIn('<package android:name="com.termux" />', manifest_text)
 
     def test_launcher_targets_local_backend(self):
         backend_client = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt").read_text()
@@ -90,6 +97,10 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("Recent Activity", ui)
         self.assertIn("Recent Decisions", ui)
         self.assertIn("Refresh Link", ui)
+        self.assertIn("Start Gemma", ui)
+        self.assertIn("Restart Gemma", ui)
+        self.assertIn("Grant Access", ui)
+        self.assertIn("allow-external-apps=true", ui)
         self.assertIn("Last: $lastRoute", ui)
         self.assertIn("Backend offline. Search apps or launch locally", ui)
         self.assertIn("Search apps or ask Gemma", ui)
@@ -101,10 +112,17 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
     def test_launcher_uses_real_json_client_and_icons(self):
         backend_client = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt").read_text()
         activity = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/MainActivity.kt").read_text()
+        termux_bridge = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/TermuxBridge.kt").read_text()
         self.assertIn("JSONObject", backend_client)
         self.assertIn("getIcon(0)", activity)
         self.assertIn("inferLauncherCategory", activity)
         self.assertIn("launchNativeAction", activity)
+        self.assertIn("buildBackendControlIntent", activity)
+        self.assertIn("registerForActivityResult", activity)
+        self.assertIn("TERMUX_RUN_COMMAND_PERMISSION", activity)
+        self.assertIn("buildTermuxBridgeStatus", termux_bridge)
+        self.assertIn("GEMMA_BACKEND_START_SCRIPT", termux_bridge)
+        self.assertIn("com.termux.RUN_COMMAND", termux_bridge)
         self.assertIn("Settings.Panel.ACTION_INTERNET_CONNECTIVITY", activity)
         self.assertIn("MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA", activity)
 
@@ -144,6 +162,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         sdk_bootstrap = (ROOT / "tools/bootstrap_android_sdk.sh").read_text()
         build_script = (ROOT / "tools/build_android_launcher.sh").read_text()
         install_script = (ROOT / "tools/install_android_launcher.sh").read_text()
+        start_script = (ROOT / "tools/start_backend_from_launcher.sh").read_text()
         self.assertIn("gradle-8.7-bin.zip", wrapper)
         self.assertIn("distributionSha256Sum", wrapper)
         self.assertIn("JDK 17", env_script)
@@ -159,6 +178,9 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("am start --user 0", install_script)
         self.assertIn("termux-open", install_script)
         self.assertIn("Gemma Launcher", install_script)
+        self.assertIn("backend/main.py", start_script)
+        self.assertIn("--restart", start_script)
+        self.assertIn("127.0.0.1:1337/health", start_script)
 
 
 if __name__ == "__main__":

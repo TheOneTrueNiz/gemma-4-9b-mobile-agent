@@ -59,6 +59,13 @@ data class BackendStatus(
     val detail: String = "Checking launcher link.",
 )
 
+data class TermuxBridgeStatus(
+    val termuxInstalled: Boolean = false,
+    val runCommandPermissionGranted: Boolean = false,
+    val canDispatchCommands: Boolean = false,
+    val detail: String = "Checking Termux bridge.",
+)
+
 enum class OverlaySheet {
     Apps, Agent, Phone, Debug
 }

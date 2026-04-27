@@ -1,24 +1,50 @@
 package dev.niz.gemmalauncher
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
 import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
+    private var termuxBridgeStatus by mutableStateOf(TermuxBridgeStatus())
+
+    private val runCommandPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            termuxBridgeStatus = buildTermuxBridgeStatus(
+                termuxInstalled = isPackageInstalled(TERMUX_PACKAGE_NAME),
+                runCommandPermissionGranted = granted,
+                detailOverride = if (granted) {
+                    "Termux Run Command access granted."
+                } else {
+                    "Grant Termux Run Command access so the launcher can start Gemma automatically."
+                }
+            )
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val usageStore = LauncherUsageStore(this)
+        refreshTermuxBridgeStatus()
         setContent {
             MaterialTheme {
                 LauncherApp(
                     appSource = { loadLaunchableApps() },
                     usageStore = usageStore,
+                    termuxBridgeStatus = termuxBridgeStatus,
+                    refreshTermuxBridgeStatus = { refreshTermuxBridgeStatus() },
+                    requestTermuxPermission = { requestTermuxRunCommandPermission() },
+                    openTermux = { openTermux() },
+                    controlBackend = { restart -> dispatchBackendControl(restart) },
                     launchApp = { entry -> launchApp(entry) },
                     launchNativeAction = { action -> launchNativeAction(action) }
                 )
@@ -53,6 +79,72 @@ class MainActivity : ComponentActivity() {
             NativeLauncherAction.Camera -> Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
         }
         startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    private fun refreshTermuxBridgeStatus(detailOverride: String? = null) {
+        val termuxInstalled = isPackageInstalled(TERMUX_PACKAGE_NAME)
+        val permissionGranted = termuxInstalled &&
+            checkSelfPermission(TERMUX_RUN_COMMAND_PERMISSION) == PackageManager.PERMISSION_GRANTED
+        termuxBridgeStatus = buildTermuxBridgeStatus(
+            termuxInstalled = termuxInstalled,
+            runCommandPermissionGranted = permissionGranted,
+            detailOverride = detailOverride,
+        )
+    }
+
+    private fun requestTermuxRunCommandPermission() {
+        if (!isPackageInstalled(TERMUX_PACKAGE_NAME)) {
+            refreshTermuxBridgeStatus("Termux is not installed.")
+            return
+        }
+        runCommandPermissionLauncher.launch(TERMUX_RUN_COMMAND_PERMISSION)
+    }
+
+    private fun openTermux() {
+        val intent = packageManager.getLaunchIntentForPackage(TERMUX_PACKAGE_NAME) ?: return
+        startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    private fun dispatchBackendControl(restart: Boolean): String {
+        refreshTermuxBridgeStatus()
+        if (!termuxBridgeStatus.termuxInstalled) {
+            return termuxBridgeStatus.detail
+        }
+        if (!termuxBridgeStatus.runCommandPermissionGranted) {
+            return termuxBridgeStatus.detail
+        }
+
+        return try {
+            val component = startService(buildBackendControlIntent(restart))
+            val detail = if (component != null) {
+                if (restart) {
+                    "Sent restart request to Termux."
+                } else {
+                    "Sent start request to Termux."
+                }
+            } else {
+                "Termux did not accept the backend control request."
+            }
+            refreshTermuxBridgeStatus(detail)
+            detail
+        } catch (error: SecurityException) {
+            val detail = "Launcher cannot control Termux yet: ${error.message ?: "permission denied"}"
+            refreshTermuxBridgeStatus(detail)
+            detail
+        } catch (error: Exception) {
+            val detail = "Failed to send backend control request: ${error.message ?: "unknown error"}"
+            refreshTermuxBridgeStatus(detail)
+            detail
+        }
+    }
+
+    private fun isPackageInstalled(packageName: String): Boolean {
+        return try {
+            packageManager.getPackageInfo(packageName, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 }
 

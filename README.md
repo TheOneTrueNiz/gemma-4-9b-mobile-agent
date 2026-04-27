@@ -104,6 +104,7 @@ Current launcher scaffold includes:
 - app drawer driven by installed launcher activities
 - agent / phone / debug overlays
 - localhost `/chat` client for the existing backend
+- backend health, start, and restart controls through Termux
 - direct home-bar app launch routing for commands like `open chrome`
 - persistent launcher usage state for recents and launch counts
 - ranked app resolution instead of raw string matching
@@ -112,6 +113,7 @@ Launcher code layout:
 - `MainActivity.kt` for Android entry/wiring
 - `LauncherUi.kt` for Compose surfaces and overlays
 - `BackendClient.kt` for localhost backend calls
+- `TermuxBridge.kt` for launcher-to-Termux backend control
 - `LauncherModels.kt` for shared launcher data types
 - `LauncherResolver.kt` for home-input intent resolution and app ranking
 - `LauncherUsageStore.kt` for persistent launcher state
@@ -130,8 +132,23 @@ What they do:
 - `build_android_launcher.sh` runs the env check and then builds `:app:assembleDebug`
 - `install_android_launcher.sh` builds if needed, copies the debug APK into shared
   downloads when possible, and opens the Android package installer from Termux
+- `start_backend_from_launcher.sh` is the Termux-side entry point the launcher uses
+  to start or restart the Python backend
 - on non-`x86_64` Linux hosts, the build script also expects a host-native `aapt2`
   and will pass it through `android.aapt2FromMavenOverride`
+
+Launcher-managed backend setup:
+```bash
+mkdir -p ~/.termux
+printf 'allow-external-apps=true\n' >> ~/.termux/termux.properties
+termux-reload-settings
+```
+
+Android-side requirement:
+- grant `Gemma Launcher` the `Run commands in Termux environment` permission
+
+Without those two pieces, the launcher can still work as a native home shell, but
+it will not be able to spin Gemma up automatically through Termux.
 
 Arm64 / aarch64 Linux note:
 ```bash
