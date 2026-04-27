@@ -118,10 +118,46 @@ Launcher code layout:
 
 To turn it into an installable launcher, open the repo as an Android Studio project and build the `app` module.
 
+Wrapper and build entry points:
+```bash
+./tools/check_android_launcher_env.sh
+./tools/build_android_launcher.sh
+./tools/install_android_launcher.sh
+```
+
+What they do:
+- `check_android_launcher_env.sh` verifies Java 17 and Android SDK presence
+- `build_android_launcher.sh` runs the env check and then builds `:app:assembleDebug`
+- `install_android_launcher.sh` builds if needed, copies the debug APK into shared
+  downloads when possible, and opens the Android package installer from Termux
+- on non-`x86_64` Linux hosts, the build script also expects a host-native `aapt2`
+  and will pass it through `android.aapt2FromMavenOverride`
+
+Arm64 / aarch64 Linux note:
+```bash
+apt-get install aapt
+```
+
+That provides `/usr/bin/aapt2`, which is needed because Google's Maven-hosted
+`aapt2` binary is `x86_64`-only in this environment.
+
+Gradle / Android compatibility for the launcher module:
+- Android Gradle Plugin `8.5.2`
+- Gradle `8.7`
+- JDK `17`
+
 Validation:
 ```bash
 python -m unittest discover -s tests -v
+./tools/build_android_launcher.sh
 ```
+
+Install and test on-device:
+```bash
+./tools/install_android_launcher.sh
+```
+
+Then set `Gemma Launcher` as the default Home app in Android settings.
 
 Tests are in the root if you want to poke around.
 

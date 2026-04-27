@@ -34,3 +34,4 @@ bridge.py
 local.properties
 app/build/
 build/
+android-sdk/

@@ -12,6 +12,10 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "settings.gradle.kts",
             "build.gradle.kts",
             "gradle.properties",
+            "gradlew",
+            "gradlew.bat",
+            "gradle/wrapper/gradle-wrapper.jar",
+            "gradle/wrapper/gradle-wrapper.properties",
             "app/build.gradle.kts",
             "app/src/main/AndroidManifest.xml",
             "app/src/main/java/dev/niz/gemmalauncher/MainActivity.kt",
@@ -20,6 +24,10 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "app/src/main/java/dev/niz/gemmalauncher/LauncherModels.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt",
+            "tools/check_android_launcher_env.sh",
+            "tools/bootstrap_android_sdk.sh",
+            "tools/build_android_launcher.sh",
+            "tools/install_android_launcher.sh",
         ]:
             self.assertTrue((ROOT / rel).exists(), rel)
 
@@ -72,6 +80,25 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("rankAppsForQuery", resolver)
         self.assertIn("getSharedPreferences", usage_store)
         self.assertIn("recordLaunch", usage_store)
+
+    def test_wrapper_and_build_scripts_are_wired(self):
+        wrapper = (ROOT / "gradle/wrapper/gradle-wrapper.properties").read_text()
+        env_script = (ROOT / "tools/check_android_launcher_env.sh").read_text()
+        sdk_bootstrap = (ROOT / "tools/bootstrap_android_sdk.sh").read_text()
+        build_script = (ROOT / "tools/build_android_launcher.sh").read_text()
+        install_script = (ROOT / "tools/install_android_launcher.sh").read_text()
+        self.assertIn("gradle-8.7-bin.zip", wrapper)
+        self.assertIn("distributionSha256Sum", wrapper)
+        self.assertIn("JDK 17", env_script)
+        self.assertIn("host-native aapt2", env_script)
+        self.assertIn("apt-get install aapt", env_script)
+        self.assertIn("commandlinetools-linux-14742923_latest.zip", sdk_bootstrap)
+        self.assertIn('"platforms;android-34"', sdk_bootstrap)
+        self.assertIn('"build-tools;34.0.0"', sdk_bootstrap)
+        self.assertIn(':app:assembleDebug', build_script)
+        self.assertIn("android.aapt2FromMavenOverride", build_script)
+        self.assertIn("termux-open", install_script)
+        self.assertIn("Gemma Launcher", install_script)
 
 
 if __name__ == "__main__":
