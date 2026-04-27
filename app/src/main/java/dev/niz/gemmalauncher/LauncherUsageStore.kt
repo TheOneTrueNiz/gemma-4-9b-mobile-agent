@@ -12,11 +12,13 @@ class LauncherUsageStore(context: Context) {
         val recents = prefs.getString(KEY_RECENT_PACKAGES, "[]").orEmpty()
         val pinned = prefs.getString(KEY_PINNED_PACKAGES, "[]").orEmpty()
         val recentActivity = prefs.getString(KEY_RECENT_ACTIVITY, "[]").orEmpty()
+        val recentDecisions = prefs.getString(KEY_RECENT_DECISIONS, "[]").orEmpty()
         return LauncherUsageSnapshot(
             launchCounts = counts.toCountMap(),
             recentPackages = recents.toStringList(),
             pinnedPackages = pinned.toStringList(),
             recentActivityKeys = recentActivity.toStringList(),
+            recentDecisions = recentDecisions.toDecisionList(),
         )
     }
 
@@ -53,6 +55,18 @@ class LauncherUsageStore(context: Context) {
             .apply()
     }
 
+    fun recordDecision(record: LauncherDecisionRecord) {
+        val snap = snapshot()
+        val updatedDecisions = buildRecentDecisions(
+            record = record,
+            existing = snap.recentDecisions,
+        )
+
+        prefs.edit()
+            .putString(KEY_RECENT_DECISIONS, updatedDecisions.toJsonArray().toString())
+            .apply()
+    }
+
     fun togglePinned(packageName: String) {
         val snap = snapshot()
         val updatedPinned = if (packageName in snap.pinnedPackages) {
@@ -75,14 +89,26 @@ class LauncherUsageStore(context: Context) {
         private const val KEY_RECENT_PACKAGES = "recent_packages"
         private const val KEY_PINNED_PACKAGES = "pinned_packages"
         private const val KEY_RECENT_ACTIVITY = "recent_activity"
+        private const val KEY_RECENT_DECISIONS = "recent_decisions"
         private const val MAX_RECENTS = 8
         private const val MAX_PINNED = 4
         private const val MAX_ACTIVITY = 10
+        private const val MAX_DECISIONS = 12
 
         private fun buildRecentActivity(key: String, existing: List<String>): List<String> {
             return buildList {
                 add(key)
                 existing.filterNot { it == key }.take(MAX_ACTIVITY - 1).forEach(::add)
+            }
+        }
+
+        private fun buildRecentDecisions(
+            record: LauncherDecisionRecord,
+            existing: List<LauncherDecisionRecord>,
+        ): List<LauncherDecisionRecord> {
+            return buildList {
+                add(record)
+                existing.take(MAX_DECISIONS - 1).forEach(::add)
             }
         }
     }
@@ -102,6 +128,35 @@ private fun String.toStringList(): List<String> {
     return buildList(json.length()) {
         for (index in 0 until json.length()) {
             add(json.optString(index))
+        }
+    }
+}
+
+private fun String.toDecisionList(): List<LauncherDecisionRecord> {
+    val json = JSONArray(this)
+    return buildList(json.length()) {
+        for (index in 0 until json.length()) {
+            val item = json.optJSONObject(index) ?: continue
+            add(
+                LauncherDecisionRecord(
+                    query = item.optString("query"),
+                    route = item.optString("route"),
+                    detail = item.optString("detail"),
+                )
+            )
+        }
+    }
+}
+
+private fun List<LauncherDecisionRecord>.toJsonArray(): JSONArray {
+    return JSONArray().apply {
+        forEach { record ->
+            put(
+                JSONObject()
+                    .put("query", record.query)
+                    .put("route", record.route)
+                    .put("detail", record.detail)
+            )
         }
     }
 }

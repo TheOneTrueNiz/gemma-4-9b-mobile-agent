@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -116,6 +117,11 @@ fun LauncherApp(
         usageSnapshot = usageStore.snapshot()
     }
 
+    fun recordDecision(record: LauncherDecisionRecord) {
+        usageStore.recordDecision(record)
+        usageSnapshot = usageStore.snapshot()
+    }
+
     fun togglePinned(entry: LauncherEntry) {
         usageStore.togglePinned(entry.packageName)
         usageSnapshot = usageStore.snapshot()
@@ -130,22 +136,45 @@ fun LauncherApp(
     val recentActivity = remember(apps, usageSnapshot) {
         buildRecentActivityItems(apps = apps, usage = usageSnapshot)
     }
+    val recentDecisions = usageSnapshot.recentDecisions
+    val lastDecisionRoute = recentDecisions.firstOrNull()?.route
 
     fun handleLauncherResolution(message: String): Boolean {
         return when (val resolution = resolveHomeIntent(message = message, apps = apps, usage = usageSnapshot)) {
             is HomeIntentResolution.LaunchNativeAction -> {
                 recordNativeAction(resolution.action)
+                recordDecision(
+                    LauncherDecisionRecord(
+                        query = message,
+                        route = "System",
+                        detail = resolution.action.label,
+                    )
+                )
                 turns.add(ChatTurn(user = message, agent = resolution.action.openingMessage))
                 launchNativeAction(resolution.action)
                 true
             }
             is HomeIntentResolution.LaunchApp -> {
                 recordLaunch(resolution.entry)
+                recordDecision(
+                    LauncherDecisionRecord(
+                        query = message,
+                        route = "App",
+                        detail = resolution.entry.label,
+                    )
+                )
                 turns.add(ChatTurn(user = message, agent = "Opening ${resolution.entry.label}."))
                 launchApp(resolution.entry)
                 true
             }
             is HomeIntentResolution.OpenDrawer -> {
+                recordDecision(
+                    LauncherDecisionRecord(
+                        query = message,
+                        route = "Drawer",
+                        detail = resolution.query,
+                    )
+                )
                 drawerQuery = resolution.query
                 drawerSuggestions = resolution.suggestions
                 overlay = OverlaySheet.Apps
@@ -159,6 +188,13 @@ fun LauncherApp(
     fun sendMessage(message: String) {
         if (message.isBlank() || loading) return
         if (handleLauncherResolution(message)) return
+        recordDecision(
+            LauncherDecisionRecord(
+                query = message,
+                route = "Gemma",
+                detail = "Agent reasoning",
+            )
+        )
         loading = true
         turns.add(ChatTurn(user = message, agent = "Working..."))
         scope.launch {
@@ -191,6 +227,7 @@ fun LauncherApp(
                 TopStatusBar(
                     loading = loading,
                     appCount = apps.size,
+                    lastRoute = lastDecisionRoute,
                     onAgent = { overlay = OverlaySheet.Agent },
                     onPhone = { overlay = OverlaySheet.Phone },
                     onDebug = { overlay = OverlaySheet.Debug }
@@ -200,6 +237,13 @@ fun LauncherApp(
                     recentActivity = recentActivity,
                     onQuickAction = { action ->
                         recordNativeAction(action)
+                        recordDecision(
+                            LauncherDecisionRecord(
+                                query = action.label,
+                                route = "System",
+                                detail = action.label,
+                            )
+                        )
                         turns.add(ChatTurn(user = action.label, agent = action.openingMessage))
                         launchNativeAction(action)
                     }
@@ -256,11 +300,22 @@ fun LauncherApp(
                         launchApp(entry)
                     }
                 )
-                OverlaySheet.Agent -> AgentSheet(turns = turns, onRecall = { sendMessage("recall what you know about this project") })
+                OverlaySheet.Agent -> AgentSheet(
+                    turns = turns,
+                    decisions = recentDecisions,
+                    onRecall = { sendMessage("recall what you know about this project") }
+                )
                 OverlaySheet.Phone -> PhoneSheet(widgets = widgets, onRefresh = {
                     scope.launch { widgets = refreshWidgets() }
                 }, recentActivity = recentActivity, onQuickAction = { action ->
                     recordNativeAction(action)
+                    recordDecision(
+                        LauncherDecisionRecord(
+                            query = action.label,
+                            route = "System",
+                            detail = action.label,
+                        )
+                    )
                     turns.add(ChatTurn(user = action.label, agent = action.openingMessage))
                     launchNativeAction(action)
                 })
@@ -279,6 +334,7 @@ fun LauncherApp(
 private fun TopStatusBar(
     loading: Boolean,
     appCount: Int,
+    lastRoute: String?,
     onAgent: () -> Unit,
     onPhone: () -> Unit,
     onDebug: () -> Unit,
@@ -295,6 +351,9 @@ private fun TopStatusBar(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatusChip(if (loading) "Busy" else "Idle")
                 StatusChip("$appCount apps")
+                if (!lastRoute.isNullOrBlank()) {
+                    StatusChip("Last: $lastRoute")
+                }
                 IconButton(onClick = onAgent) {
                     Icon(Icons.Rounded.Memory, contentDescription = "Agent layer", tint = Color(0xFF6EE7D2))
                 }
@@ -770,13 +829,26 @@ private fun AppIcon(app: LauncherEntry, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun AgentSheet(turns: List<ChatTurn>, onRecall: () -> Unit) {
+private fun AgentSheet(
+    turns: List<ChatTurn>,
+    decisions: List<LauncherDecisionRecord>,
+    onRecall: () -> Unit,
+) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Agent Layer", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
             TextButton(onClick = onRecall) { Text("Recall") }
         }
         Spacer(modifier = Modifier.height(12.dp))
+        if (decisions.isNotEmpty()) {
+            Text("Recent Decisions", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            decisions.take(4).forEach { decision ->
+                DecisionCard(decision = decision)
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         turns.takeLast(4).reversed().forEach { turn ->
             Card(colors = CardDefaults.cardColors(containerColor = Color(0x44203846)), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -896,6 +968,41 @@ private fun RecentActivityCard(activity: LauncherActivityItem) {
                 Text(activity.subtitle, color = Color(0xFF7FA4B2), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             StatusChip(activity.kind)
+        }
+    }
+}
+
+@Composable
+private fun DecisionCard(decision: LauncherDecisionRecord) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0x44203846)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    decision.detail,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                StatusChip(decision.route)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                decision.query,
+                color = Color(0xFF7FA4B2),
+                fontSize = 11.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

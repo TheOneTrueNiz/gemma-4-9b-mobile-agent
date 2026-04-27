@@ -26,6 +26,13 @@ data class LauncherUsageSnapshot(
     val recentPackages: List<String> = emptyList(),
     val pinnedPackages: List<String> = emptyList(),
     val recentActivityKeys: List<String> = emptyList(),
+    val recentDecisions: List<LauncherDecisionRecord> = emptyList(),
+)
+
+data class LauncherDecisionRecord(
+    val query: String,
+    val route: String,
+    val detail: String,
 )
 
 data class ChatTurn(
