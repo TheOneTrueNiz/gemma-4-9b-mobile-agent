@@ -8,6 +8,11 @@ data class LauncherEntry(
     val icon: Drawable? = null,
 )
 
+data class LauncherUsageSnapshot(
+    val launchCounts: Map<String, Int> = emptyMap(),
+    val recentPackages: List<String> = emptyList(),
+)
+
 data class ChatTurn(
     val user: String,
     val agent: String,
@@ -26,4 +31,21 @@ data class BackendReply(
 
 enum class OverlaySheet {
     Apps, Agent, Phone, Debug
+}
+
+sealed interface HomeIntentResolution {
+    data class LaunchApp(
+        val entry: LauncherEntry,
+        val query: String,
+    ) : HomeIntentResolution
+
+    data class OpenDrawer(
+        val query: String,
+        val message: String,
+        val suggestions: List<LauncherEntry> = emptyList(),
+    ) : HomeIntentResolution
+
+    data class SendToAgent(
+        val message: String,
+    ) : HomeIntentResolution
 }

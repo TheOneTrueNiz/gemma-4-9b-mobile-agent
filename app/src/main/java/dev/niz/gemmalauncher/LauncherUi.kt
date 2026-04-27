@@ -63,6 +63,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LauncherApp(
     appSource: () -> List<LauncherEntry>,
+    usageStore: LauncherUsageStore,
     launchApp: (LauncherEntry) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -79,7 +80,8 @@ fun LauncherApp(
     var loading by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<OverlaySheet?>(null) }
     var apps by remember { mutableStateOf(emptyList<LauncherEntry>()) }
-    val recentAppPackages = remember { mutableStateListOf<String>() }
+    var drawerQuery by remember { mutableStateOf("") }
+    var usageSnapshot by remember { mutableStateOf(LauncherUsageSnapshot()) }
     var traceVisible by remember { mutableStateOf(true) }
     var lastTraceSummary by remember { mutableStateOf<List<String>>(emptyList()) }
     var widgets by remember {
@@ -95,44 +97,36 @@ fun LauncherApp(
 
     LaunchedEffect(Unit) {
         apps = appSource()
+        usageSnapshot = usageStore.snapshot()
         widgets = refreshWidgets()
     }
 
-    fun noteRecentApp(entry: LauncherEntry) {
-        recentAppPackages.remove(entry.packageName)
-        recentAppPackages.add(0, entry.packageName)
-        while (recentAppPackages.size > 6) {
-            recentAppPackages.removeLast()
-        }
+    fun recordLaunch(entry: LauncherEntry) {
+        usageStore.recordLaunch(entry.packageName)
+        usageSnapshot = usageStore.snapshot()
     }
 
-    fun tryLaunchFromChat(message: String): Boolean {
-        val normalized = message.trim()
-        val prefixes = listOf("open ", "launch ", "start ")
-        val prefix = prefixes.firstOrNull { normalized.lowercase().startsWith(it) } ?: return false
-        val query = normalized.removePrefix(prefix).trim()
-        if (query.isBlank()) return false
-        val match = apps.firstOrNull { app ->
-            app.label.equals(query, ignoreCase = true) ||
-                app.packageName.equals(query, ignoreCase = true)
-        } ?: apps.firstOrNull { app ->
-            app.label.lowercase().contains(query.lowercase()) ||
-                app.packageName.lowercase().contains(query.lowercase())
+    fun handleLauncherResolution(message: String): Boolean {
+        return when (val resolution = resolveHomeIntent(message = message, apps = apps, usage = usageSnapshot)) {
+            is HomeIntentResolution.LaunchApp -> {
+                recordLaunch(resolution.entry)
+                turns.add(ChatTurn(user = message, agent = "Opening ${resolution.entry.label}."))
+                launchApp(resolution.entry)
+                true
+            }
+            is HomeIntentResolution.OpenDrawer -> {
+                drawerQuery = resolution.query
+                overlay = OverlaySheet.Apps
+                turns.add(ChatTurn(user = message, agent = resolution.message))
+                true
+            }
+            is HomeIntentResolution.SendToAgent -> false
         }
-
-        if (match != null) {
-            noteRecentApp(match)
-            turns.add(ChatTurn(user = message, agent = "Opening ${match.label}."))
-            launchApp(match)
-        } else {
-            turns.add(ChatTurn(user = message, agent = "I couldn't find an installed app matching \"$query\". Open the app drawer and search for it."))
-        }
-        return true
     }
 
     fun sendMessage(message: String) {
         if (message.isBlank() || loading) return
-        if (tryLaunchFromChat(message)) return
+        if (handleLauncherResolution(message)) return
         loading = true
         turns.add(ChatTurn(user = message, agent = "Working..."))
         scope.launch {
@@ -170,7 +164,10 @@ fun LauncherApp(
                 Spacer(modifier = Modifier.height(10.dp))
                 LauncherDock(
                     onAgent = { overlay = OverlaySheet.Agent },
-                    onApps = { overlay = OverlaySheet.Apps },
+                    onApps = {
+                        drawerQuery = ""
+                        overlay = OverlaySheet.Apps
+                    },
                     onPhone = { overlay = OverlaySheet.Phone },
                     onDebug = { overlay = OverlaySheet.Debug }
                 )
@@ -198,9 +195,13 @@ fun LauncherApp(
             when (overlay) {
                 OverlaySheet.Apps -> AppDrawerSheet(
                     apps = apps,
-                    recentApps = apps.filter { it.packageName in recentAppPackages },
+                    usage = usageSnapshot,
+                    initialQuery = drawerQuery,
+                    recentApps = usageSnapshot.recentPackages.mapNotNull { pkg ->
+                        apps.firstOrNull { it.packageName == pkg }
+                    },
                     launchApp = { entry ->
-                        noteRecentApp(entry)
+                        recordLaunch(entry)
                         launchApp(entry)
                     }
                 )
@@ -383,18 +384,18 @@ private fun CommandBar(
 @Composable
 private fun AppDrawerSheet(
     apps: List<LauncherEntry>,
+    usage: LauncherUsageSnapshot,
+    initialQuery: String,
     recentApps: List<LauncherEntry>,
     launchApp: (LauncherEntry) -> Unit
 ) {
-    var query by remember { mutableStateOf("") }
-    val visibleApps = remember(apps, query) {
+    var query by remember(initialQuery) { mutableStateOf(initialQuery) }
+    val visibleApps = remember(apps, query, usage) {
         val trimmed = query.trim().lowercase()
         if (trimmed.isBlank()) {
             apps
         } else {
-            apps.filter { app ->
-                app.label.lowercase().contains(trimmed) || app.packageName.lowercase().contains(trimmed)
-            }
+            rankAppsForQuery(trimmed, apps, usage)
         }
     }
 

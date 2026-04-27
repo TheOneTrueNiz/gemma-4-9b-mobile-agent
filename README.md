@@ -104,12 +104,17 @@ Current launcher scaffold includes:
 - app drawer driven by installed launcher activities
 - agent / phone / debug overlays
 - localhost `/chat` client for the existing backend
+- direct home-bar app launch routing for commands like `open chrome`
+- persistent launcher usage state for recents and launch counts
+- ranked app resolution instead of raw string matching
 
 Launcher code layout:
 - `MainActivity.kt` for Android entry/wiring
 - `LauncherUi.kt` for Compose surfaces and overlays
 - `BackendClient.kt` for localhost backend calls
 - `LauncherModels.kt` for shared launcher data types
+- `LauncherResolver.kt` for home-input intent resolution and app ranking
+- `LauncherUsageStore.kt` for persistent launcher state
 
 To turn it into an installable launcher, open the repo as an Android Studio project and build the `app` module.
 

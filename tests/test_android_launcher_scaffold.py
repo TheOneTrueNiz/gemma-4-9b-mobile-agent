@@ -18,6 +18,8 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "app/src/main/java/dev/niz/gemmalauncher/LauncherUi.kt",
             "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherModels.kt",
+            "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt",
+            "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt",
         ]:
             self.assertTrue((ROOT / rel).exists(), rel)
 
@@ -53,13 +55,23 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("LauncherDock", ui)
         self.assertIn("OverlaySheet.Apps", ui)
         self.assertIn("Recent Apps", ui)
-        self.assertIn('listOf("open ", "launch ", "start ")', ui)
+        self.assertIn("resolveHomeIntent", ui)
+        self.assertIn("rankAppsForQuery", ui)
 
     def test_launcher_uses_real_json_client_and_icons(self):
         backend_client = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt").read_text()
         activity = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/MainActivity.kt").read_text()
         self.assertIn("JSONObject", backend_client)
         self.assertIn("getIcon(0)", activity)
+
+    def test_launcher_has_resolver_and_usage_store(self):
+        resolver = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt").read_text()
+        usage_store = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt").read_text()
+        self.assertIn('listOf("open ", "launch ", "start ")', resolver)
+        self.assertIn("resolveHomeIntent", resolver)
+        self.assertIn("rankAppsForQuery", resolver)
+        self.assertIn("getSharedPreferences", usage_store)
+        self.assertIn("recordLaunch", usage_store)
 
 
 if __name__ == "__main__":
