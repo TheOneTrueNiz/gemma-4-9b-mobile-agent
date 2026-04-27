@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -107,6 +108,18 @@ fun LauncherApp(
         usageSnapshot = usageStore.snapshot()
     }
 
+    fun togglePinned(entry: LauncherEntry) {
+        usageStore.togglePinned(entry.packageName)
+        usageSnapshot = usageStore.snapshot()
+    }
+
+    val pinnedApps = usageSnapshot.pinnedPackages.mapNotNull { pkg ->
+        apps.firstOrNull { it.packageName == pkg }
+    }
+    val dockApps = remember(apps, usageSnapshot) {
+        buildDockApps(apps = apps, usage = usageSnapshot)
+    }
+
     fun handleLauncherResolution(message: String): Boolean {
         return when (val resolution = resolveHomeIntent(message = message, apps = apps, usage = usageSnapshot)) {
             is HomeIntentResolution.LaunchApp -> {
@@ -157,20 +170,28 @@ fun LauncherApp(
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                TopStatusBar(loading = loading, appCount = apps.size)
+                TopStatusBar(
+                    loading = loading,
+                    appCount = apps.size,
+                    onAgent = { overlay = OverlaySheet.Agent },
+                    onPhone = { overlay = OverlaySheet.Phone },
+                    onDebug = { overlay = OverlaySheet.Debug }
+                )
                 Spacer(modifier = Modifier.height(10.dp))
                 HomeHero()
                 Spacer(modifier = Modifier.height(10.dp))
                 ChatHome(turns = turns, traceVisible = traceVisible, lastTraceSummary = lastTraceSummary)
                 Spacer(modifier = Modifier.height(10.dp))
                 LauncherDock(
-                    onAgent = { overlay = OverlaySheet.Agent },
+                    dockApps = dockApps,
+                    onLaunchApp = { entry ->
+                        recordLaunch(entry)
+                        launchApp(entry)
+                    },
                     onApps = {
                         drawerQuery = ""
                         overlay = OverlaySheet.Apps
-                    },
-                    onPhone = { overlay = OverlaySheet.Phone },
-                    onDebug = { overlay = OverlaySheet.Debug }
+                    }
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 CommandBar(
@@ -197,10 +218,12 @@ fun LauncherApp(
                 OverlaySheet.Apps -> AppDrawerSheet(
                     apps = apps,
                     usage = usageSnapshot,
+                    pinnedApps = pinnedApps,
                     initialQuery = drawerQuery,
                     recentApps = usageSnapshot.recentPackages.mapNotNull { pkg ->
                         apps.firstOrNull { it.packageName == pkg }
                     },
+                    onTogglePinned = { entry -> togglePinned(entry) },
                     launchApp = { entry ->
                         recordLaunch(entry)
                         launchApp(entry)
@@ -222,7 +245,13 @@ fun LauncherApp(
 }
 
 @Composable
-private fun TopStatusBar(loading: Boolean, appCount: Int) {
+private fun TopStatusBar(
+    loading: Boolean,
+    appCount: Int,
+    onAgent: () -> Unit,
+    onPhone: () -> Unit,
+    onDebug: () -> Unit,
+) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xCC08141C))) {
         Row(
             modifier = Modifier
@@ -235,6 +264,15 @@ private fun TopStatusBar(loading: Boolean, appCount: Int) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatusChip(if (loading) "Busy" else "Idle")
                 StatusChip("$appCount apps")
+                IconButton(onClick = onAgent) {
+                    Icon(Icons.Rounded.Memory, contentDescription = "Agent layer", tint = Color(0xFF6EE7D2))
+                }
+                IconButton(onClick = onPhone) {
+                    Icon(Icons.Rounded.Android, contentDescription = "Phone layer", tint = Color(0xFF6EE7D2))
+                }
+                IconButton(onClick = onDebug) {
+                    Icon(Icons.Rounded.BugReport, contentDescription = "Debug layer", tint = Color(0xFF6EE7D2))
+                }
             }
         }
     }
@@ -315,20 +353,22 @@ private fun MessageBubble(text: String, isUser: Boolean) {
 
 @Composable
 private fun LauncherDock(
-    onAgent: () -> Unit,
+    dockApps: List<LauncherEntry>,
+    onLaunchApp: (LauncherEntry) -> Unit,
     onApps: () -> Unit,
-    onPhone: () -> Unit,
-    onDebug: () -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xDD08141C))) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            DockAction("Agent", Icons.Rounded.Memory, onAgent, Modifier.weight(1f))
+            dockApps.take(4).forEach { app ->
+                DockApp(app = app, onClick = { onLaunchApp(app) }, modifier = Modifier.weight(1f))
+            }
+            repeat(4 - dockApps.take(4).size) {
+                DockPlaceholder(modifier = Modifier.weight(1f))
+            }
             DockAction("Apps", Icons.Rounded.Dashboard, onApps, Modifier.weight(1f))
-            DockAction("Phone", Icons.Rounded.Android, onPhone, Modifier.weight(1f))
-            DockAction("Debug", Icons.Rounded.BugReport, onDebug, Modifier.weight(1f))
         }
     }
 }
@@ -352,6 +392,37 @@ private fun DockAction(
             Spacer(modifier = Modifier.height(6.dp))
             Text(label, color = Color.White, fontSize = 12.sp)
         }
+    }
+}
+
+@Composable
+private fun DockApp(
+    app: LauncherEntry,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color(0x441A3342))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            AppIcon(app = app, modifier = Modifier.size(40.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun DockPlaceholder(modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color(0x221A3342))
+    ) {
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp))
     }
 }
 
@@ -386,8 +457,10 @@ private fun CommandBar(
 private fun AppDrawerSheet(
     apps: List<LauncherEntry>,
     usage: LauncherUsageSnapshot,
+    pinnedApps: List<LauncherEntry>,
     initialQuery: String,
     recentApps: List<LauncherEntry>,
+    onTogglePinned: (LauncherEntry) -> Unit,
     launchApp: (LauncherEntry) -> Unit
 ) {
     var query by remember(initialQuery) { mutableStateOf(initialQuery) }
@@ -411,22 +484,48 @@ private fun AppDrawerSheet(
             label = { Text("Search apps") }
         )
         Spacer(modifier = Modifier.height(12.dp))
+        if (query.isBlank() && pinnedApps.isNotEmpty()) {
+            Text("Pinned Apps", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyRowRecentApps(
+                recentApps = pinnedApps,
+                launchApp = launchApp,
+                onTogglePinned = onTogglePinned,
+                pinnedPackages = usage.pinnedPackages
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         if (query.isBlank() && recentApps.isNotEmpty()) {
             Text("Recent Apps", color = Color(0xFF6EE7D2), fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))
-            LazyRowRecentApps(recentApps = recentApps, launchApp = launchApp)
+            LazyRowRecentApps(
+                recentApps = recentApps,
+                launchApp = launchApp,
+                onTogglePinned = onTogglePinned,
+                pinnedPackages = usage.pinnedPackages
+            )
             Spacer(modifier = Modifier.height(12.dp))
         }
         LazyVerticalGrid(columns = GridCells.Fixed(4), modifier = Modifier.height(420.dp)) {
             items(visibleApps, key = { it.packageName }) { app ->
-                AppIconTile(app = app, onClick = { launchApp(app) })
+                AppIconTile(
+                    app = app,
+                    pinned = app.packageName in usage.pinnedPackages,
+                    onClick = { launchApp(app) },
+                    onTogglePinned = { onTogglePinned(app) }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun LazyRowRecentApps(recentApps: List<LauncherEntry>, launchApp: (LauncherEntry) -> Unit) {
+private fun LazyRowRecentApps(
+    recentApps: List<LauncherEntry>,
+    launchApp: (LauncherEntry) -> Unit,
+    onTogglePinned: (LauncherEntry) -> Unit,
+    pinnedPackages: List<String>
+) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
         recentApps.take(4).forEach { app ->
             Card(
@@ -437,6 +536,18 @@ private fun LazyRowRecentApps(recentApps: List<LauncherEntry>, launchApp: (Launc
                     modifier = Modifier.fillMaxWidth().padding(10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        IconButton(onClick = { onTogglePinned(app) }) {
+                            Icon(
+                                Icons.Rounded.PushPin,
+                                contentDescription = "Pin ${app.label}",
+                                tint = if (app.packageName in pinnedPackages) Color(0xFF6EE7D2) else Color(0xFF5A7380)
+                            )
+                        }
+                    }
                     AppIcon(app = app, modifier = Modifier.size(40.dp))
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -447,16 +558,32 @@ private fun LazyRowRecentApps(recentApps: List<LauncherEntry>, launchApp: (Launc
 }
 
 @Composable
-private fun AppIconTile(app: LauncherEntry, onClick: () -> Unit) {
-    Column(
+private fun AppIconTile(
+    app: LauncherEntry,
+    pinned: Boolean,
+    onClick: () -> Unit,
+    onTogglePinned: () -> Unit
+) {
+    Box(
         modifier = Modifier
             .padding(8.dp)
-            .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .clickable(onClick = onClick)
     ) {
-        AppIcon(app = app, modifier = Modifier.size(52.dp))
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            AppIcon(app = app, modifier = Modifier.size(52.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        IconButton(
+            onClick = onTogglePinned,
+            modifier = Modifier.align(Alignment.TopEnd)
+        ) {
+            Icon(
+                Icons.Rounded.PushPin,
+                contentDescription = "Pin ${app.label}",
+                tint = if (pinned) Color(0xFF6EE7D2) else Color(0xFF5A7380)
+            )
+        }
     }
 }
 
@@ -550,4 +677,22 @@ private fun StatusChip(label: String) {
     ) {
         Text(label, color = Color(0xFFC7D9E3), fontSize = 11.sp)
     }
+}
+
+private fun buildDockApps(apps: List<LauncherEntry>, usage: LauncherUsageSnapshot): List<LauncherEntry> {
+    val pinned = usage.pinnedPackages.mapNotNull { pkg ->
+        apps.firstOrNull { it.packageName == pkg }
+    }
+    val recent = usage.recentPackages.mapNotNull { pkg ->
+        apps.firstOrNull { it.packageName == pkg && pkg !in usage.pinnedPackages }
+    }
+    val frequent = apps
+        .sortedByDescending { usage.launchCounts[it.packageName] ?: 0 }
+        .filterNot { it.packageName in usage.pinnedPackages || it.packageName in usage.recentPackages }
+
+    return buildList {
+        pinned.forEach(::add)
+        recent.forEach(::add)
+        frequent.forEach(::add)
+    }.distinctBy { it.packageName }.take(4)
 }

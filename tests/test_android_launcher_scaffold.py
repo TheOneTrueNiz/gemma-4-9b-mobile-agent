@@ -61,6 +61,8 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         ui = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherUi.kt").read_text()
         self.assertIn("Search apps", ui)
         self.assertIn("LauncherDock", ui)
+        self.assertIn("DockApp", ui)
+        self.assertIn("Pinned Apps", ui)
         self.assertIn("OverlaySheet.Apps", ui)
         self.assertIn("Recent Apps", ui)
         self.assertIn("resolveHomeIntent", ui)
@@ -80,6 +82,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("rankAppsForQuery", resolver)
         self.assertIn("getSharedPreferences", usage_store)
         self.assertIn("recordLaunch", usage_store)
+        self.assertIn("togglePinned", usage_store)
 
     def test_wrapper_and_build_scripts_are_wired(self):
         wrapper = (ROOT / "gradle/wrapper/gradle-wrapper.properties").read_text()

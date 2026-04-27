@@ -10,9 +10,11 @@ class LauncherUsageStore(context: Context) {
     fun snapshot(): LauncherUsageSnapshot {
         val counts = prefs.getString(KEY_LAUNCH_COUNTS, "{}").orEmpty()
         val recents = prefs.getString(KEY_RECENT_PACKAGES, "[]").orEmpty()
+        val pinned = prefs.getString(KEY_PINNED_PACKAGES, "[]").orEmpty()
         return LauncherUsageSnapshot(
             launchCounts = counts.toCountMap(),
             recentPackages = recents.toStringList(),
+            pinnedPackages = pinned.toStringList(),
         )
     }
 
@@ -32,11 +34,29 @@ class LauncherUsageStore(context: Context) {
             .apply()
     }
 
+    fun togglePinned(packageName: String) {
+        val snap = snapshot()
+        val updatedPinned = if (packageName in snap.pinnedPackages) {
+            snap.pinnedPackages.filterNot { it == packageName }
+        } else {
+            buildList {
+                add(packageName)
+                snap.pinnedPackages.filterNot { it == packageName }.take(MAX_PINNED - 1).forEach(::add)
+            }
+        }
+
+        prefs.edit()
+            .putString(KEY_PINNED_PACKAGES, JSONArray(updatedPinned).toString())
+            .apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "gemma_launcher_usage"
         private const val KEY_LAUNCH_COUNTS = "launch_counts"
         private const val KEY_RECENT_PACKAGES = "recent_packages"
+        private const val KEY_PINNED_PACKAGES = "pinned_packages"
         private const val MAX_RECENTS = 8
+        private const val MAX_PINNED = 4
     }
 }
 
