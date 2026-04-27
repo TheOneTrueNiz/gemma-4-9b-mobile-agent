@@ -22,9 +22,15 @@ elif [[ -d "/sdcard/Download" ]]; then
   echo "Copied APK to shared downloads: ${INSTALL_APK_PATH}"
 fi
 
-if command -v termux-open >/dev/null 2>&1; then
-  echo "Opening Android package installer..."
-  termux-open "${INSTALL_APK_PATH}"
+APK_URI="file://${INSTALL_APK_PATH}"
+APK_MIME="application/vnd.android.package-archive"
+
+if command -v am >/dev/null 2>&1; then
+  echo "Opening Android package installer via explicit VIEW intent..."
+  am start --user 0 -a android.intent.action.VIEW -d "${APK_URI}" -t "${APK_MIME}" >/dev/null
+elif command -v termux-open >/dev/null 2>&1; then
+  echo "Opening Android package installer via termux-open fallback..."
+  termux-open --view --content-type "${APK_MIME}" "${INSTALL_APK_PATH}"
 else
   echo "APK ready at: ${INSTALL_APK_PATH}"
 fi

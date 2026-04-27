@@ -154,6 +154,9 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn('"build-tools;34.0.0"', sdk_bootstrap)
         self.assertIn(':app:assembleDebug', build_script)
         self.assertIn("android.aapt2FromMavenOverride", build_script)
+        self.assertIn("android.intent.action.VIEW", install_script)
+        self.assertIn("application/vnd.android.package-archive", install_script)
+        self.assertIn("am start --user 0", install_script)
         self.assertIn("termux-open", install_script)
         self.assertIn("Gemma Launcher", install_script)
 
