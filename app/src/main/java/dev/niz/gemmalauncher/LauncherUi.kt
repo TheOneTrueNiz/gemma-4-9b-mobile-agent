@@ -83,6 +83,7 @@ fun LauncherApp(
     var overlay by remember { mutableStateOf<OverlaySheet?>(null) }
     var apps by remember { mutableStateOf(emptyList<LauncherEntry>()) }
     var drawerQuery by remember { mutableStateOf("") }
+    var drawerSuggestions by remember { mutableStateOf(emptyList<LauncherEntry>()) }
     var usageSnapshot by remember { mutableStateOf(LauncherUsageSnapshot()) }
     var traceVisible by remember { mutableStateOf(true) }
     var lastTraceSummary by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -130,6 +131,7 @@ fun LauncherApp(
             }
             is HomeIntentResolution.OpenDrawer -> {
                 drawerQuery = resolution.query
+                drawerSuggestions = resolution.suggestions
                 overlay = OverlaySheet.Apps
                 turns.add(ChatTurn(user = message, agent = resolution.message))
                 true
@@ -190,6 +192,7 @@ fun LauncherApp(
                     },
                     onApps = {
                         drawerQuery = ""
+                        drawerSuggestions = emptyList()
                         overlay = OverlaySheet.Apps
                     }
                 )
@@ -220,6 +223,7 @@ fun LauncherApp(
                     usage = usageSnapshot,
                     pinnedApps = pinnedApps,
                     initialQuery = drawerQuery,
+                    suggestedApps = drawerSuggestions,
                     recentApps = usageSnapshot.recentPackages.mapNotNull { pkg ->
                         apps.firstOrNull { it.packageName == pkg }
                     },
@@ -442,7 +446,8 @@ private fun CommandBar(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.weight(1f),
-                label = { Text("Talk to Gemma") },
+                label = { Text("Search apps or ask Gemma") },
+                placeholder = { Text("Search apps or ask Gemma") },
                 enabled = !loading,
                 singleLine = true
             )
@@ -459,6 +464,7 @@ private fun AppDrawerSheet(
     usage: LauncherUsageSnapshot,
     pinnedApps: List<LauncherEntry>,
     initialQuery: String,
+    suggestedApps: List<LauncherEntry>,
     recentApps: List<LauncherEntry>,
     onTogglePinned: (LauncherEntry) -> Unit,
     launchApp: (LauncherEntry) -> Unit
@@ -484,6 +490,17 @@ private fun AppDrawerSheet(
             label = { Text("Search apps") }
         )
         Spacer(modifier = Modifier.height(12.dp))
+        if (query.isNotBlank() && suggestedApps.isNotEmpty()) {
+            Text("Top Matches", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyRowRecentApps(
+                recentApps = suggestedApps,
+                launchApp = launchApp,
+                onTogglePinned = onTogglePinned,
+                pinnedPackages = usage.pinnedPackages
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         if (query.isBlank() && pinnedApps.isNotEmpty()) {
             Text("Pinned Apps", color = Color(0xFF6EE7D2), fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))

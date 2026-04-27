@@ -24,6 +24,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "app/src/main/java/dev/niz/gemmalauncher/LauncherModels.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt",
+            "app/src/test/java/dev/niz/gemmalauncher/LauncherResolverTest.kt",
             "tools/check_android_launcher_env.sh",
             "tools/bootstrap_android_sdk.sh",
             "tools/build_android_launcher.sh",
@@ -63,6 +64,8 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("LauncherDock", ui)
         self.assertIn("DockApp", ui)
         self.assertIn("Pinned Apps", ui)
+        self.assertIn("Top Matches", ui)
+        self.assertIn("Search apps or ask Gemma", ui)
         self.assertIn("OverlaySheet.Apps", ui)
         self.assertIn("Recent Apps", ui)
         self.assertIn("resolveHomeIntent", ui)
@@ -78,6 +81,10 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         resolver = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt").read_text()
         usage_store = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt").read_text()
         self.assertIn('listOf("open ", "launch ", "start ")', resolver)
+        self.assertIn('listOf(', resolver)
+        self.assertIn('find app ', resolver)
+        self.assertIn("fuzzyScore", resolver)
+        self.assertIn("aliasTerms", resolver)
         self.assertIn("resolveHomeIntent", resolver)
         self.assertIn("rankAppsForQuery", resolver)
         self.assertIn("getSharedPreferences", usage_store)
