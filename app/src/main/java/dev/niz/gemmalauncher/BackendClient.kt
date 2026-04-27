@@ -9,7 +9,28 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val BACKEND_CHAT_URL = "http://127.0.0.1:1337/chat"
+private const val BACKEND_BASE_URL = "http://127.0.0.1:1337"
+private const val BACKEND_CHAT_URL = "$BACKEND_BASE_URL/chat"
+private const val BACKEND_HEALTH_URL = "$BACKEND_BASE_URL/health"
+
+suspend fun fetchBackendStatus(): BackendStatus = withContext(Dispatchers.IO) {
+    runCatching {
+        val connection = (URL(BACKEND_HEALTH_URL).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 2000
+            readTimeout = 4000
+        }
+        val body = BufferedReader(connection.inputStream.reader()).use { it.readText() }
+        parseBackendStatus(body)
+    }.getOrElse { error ->
+        BackendStatus(
+            checked = true,
+            online = false,
+            actorOnline = false,
+            detail = error.message ?: "Backend unavailable",
+        )
+    }
+}
 
 suspend fun backendChat(message: String): BackendReply = withContext(Dispatchers.IO) {
     val connection = (URL(BACKEND_CHAT_URL).openConnection() as HttpURLConnection).apply {
@@ -35,17 +56,51 @@ suspend fun backendChat(message: String): BackendReply = withContext(Dispatchers
     )
 }
 
-suspend fun refreshWidgets(): List<WidgetState> {
+suspend fun refreshWidgets(status: BackendStatus? = null): List<WidgetState> {
     val prompts = listOf(
         "Battery" to "battery",
         "UTC" to "what time is it in utc",
         "Clipboard" to "get clipboard",
         "Location" to "get location",
     )
+    val backendStatus = status ?: fetchBackendStatus()
+    if (!backendStatus.online) {
+        return prompts.map { (title, _) ->
+            WidgetState(title = title, value = "Backend offline", live = false)
+        }
+    }
     return prompts.map { (title, prompt) ->
         val reply = runCatching { backendChat(prompt) }.getOrNull()
         WidgetState(title = title, value = reply?.response ?: "Unavailable", live = reply != null)
     }
+}
+
+fun parseBackendStatus(body: String): BackendStatus {
+    val online = extractJsonStringField(body, "status") == "ok"
+    val actorOnline = extractJsonBooleanField(body, "actor_online")
+    val actorModel = extractJsonStringField(body, "actor_model")
+    val detail = when {
+        !online -> "Backend reported an unhealthy state."
+        actorOnline -> "Agent runtime is reachable."
+        else -> "Agent runtime is offline. Local launcher paths still work."
+    }
+    return BackendStatus(
+        checked = true,
+        online = online,
+        actorOnline = actorOnline,
+        actorModel = actorModel,
+        detail = detail,
+    )
+}
+
+private fun extractJsonStringField(body: String, key: String): String? {
+    val pattern = Regex("\"$key\"\\s*:\\s*\"([^\"]+)\"")
+    return pattern.find(body)?.groupValues?.getOrNull(1)
+}
+
+private fun extractJsonBooleanField(body: String, key: String): Boolean {
+    val pattern = Regex("\"$key\"\\s*:\\s*(true|false)")
+    return pattern.find(body)?.groupValues?.getOrNull(1)?.toBoolean() ?: false
 }
 
 private fun JSONArray?.toStringList(): List<String> {

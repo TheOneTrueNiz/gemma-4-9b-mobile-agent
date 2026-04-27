@@ -26,6 +26,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "app/src/main/java/dev/niz/gemmalauncher/LauncherNativeActions.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt",
+            "app/src/test/java/dev/niz/gemmalauncher/BackendClientTest.kt",
             "app/src/test/java/dev/niz/gemmalauncher/LauncherCatalogTest.kt",
             "app/src/test/java/dev/niz/gemmalauncher/LauncherResolverTest.kt",
             "tools/check_android_launcher_env.sh",
@@ -58,7 +59,10 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
 
     def test_launcher_targets_local_backend(self):
         backend_client = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt").read_text()
-        self.assertIn("http://127.0.0.1:1337/chat", backend_client)
+        self.assertIn('private const val BACKEND_BASE_URL = "http://127.0.0.1:1337"', backend_client)
+        self.assertIn('private const val BACKEND_CHAT_URL = "$BACKEND_BASE_URL/chat"', backend_client)
+        self.assertIn('private const val BACKEND_HEALTH_URL = "$BACKEND_BASE_URL/health"', backend_client)
+        self.assertIn("fetchBackendStatus", backend_client)
         self.assertIn("android.intent.category.HOME", (ROOT / "app/src/main/AndroidManifest.xml").read_text())
 
     def test_launcher_ui_has_app_search_and_dock(self):
@@ -71,16 +75,23 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("QuickActionRow", ui)
         self.assertIn("RecentActivityCard", ui)
         self.assertIn("DecisionCard", ui)
+        self.assertIn("BackendStatusCard", ui)
         self.assertIn("HomeInputSuggestionRow", ui)
         self.assertIn("Pinned Apps", ui)
         self.assertIn("Best Match", ui)
         self.assertIn("Other Matches", ui)
         self.assertIn("App Match", ui)
         self.assertIn("System Action", ui)
+        self.assertIn("Gemma Online", ui)
+        self.assertIn("Gemma Offline", ui)
+        self.assertIn("Actor Ready", ui)
+        self.assertIn("Actor Down", ui)
         self.assertIn("Quick Actions", ui)
         self.assertIn("Recent Activity", ui)
         self.assertIn("Recent Decisions", ui)
+        self.assertIn("Refresh Link", ui)
         self.assertIn("Last: $lastRoute", ui)
+        self.assertIn("Backend offline. Search apps or launch locally", ui)
         self.assertIn("Search apps or ask Gemma", ui)
         self.assertIn("OverlaySheet.Apps", ui)
         self.assertIn("Recent Apps", ui)

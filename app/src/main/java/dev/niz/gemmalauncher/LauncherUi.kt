@@ -77,7 +77,7 @@ fun LauncherApp(
         mutableStateListOf(
             ChatTurn(
                 user = "",
-                agent = "Gemma Launcher is online. This home screen is chat-first. Ask me to route you to apps, tools, or device actions."
+                agent = "Gemma Launcher is ready. Local app and system routing works immediately. Agent responses depend on the local backend."
             )
         )
     }
@@ -90,6 +90,7 @@ fun LauncherApp(
     var usageSnapshot by remember { mutableStateOf(LauncherUsageSnapshot()) }
     var traceVisible by remember { mutableStateOf(true) }
     var lastTraceSummary by remember { mutableStateOf<List<String>>(emptyList()) }
+    var backendStatus by remember { mutableStateOf(BackendStatus()) }
     var widgets by remember {
         mutableStateOf(
             listOf(
@@ -104,7 +105,8 @@ fun LauncherApp(
     LaunchedEffect(Unit) {
         apps = appSource()
         usageSnapshot = usageStore.snapshot()
-        widgets = refreshWidgets()
+        backendStatus = fetchBackendStatus()
+        widgets = refreshWidgets(backendStatus)
     }
 
     fun recordLaunch(entry: LauncherEntry) {
@@ -140,6 +142,15 @@ fun LauncherApp(
     val lastDecisionRoute = recentDecisions.firstOrNull()?.route
     val homeSuggestions = remember(input, apps, usageSnapshot) {
         buildHomeInputSuggestions(query = input, apps = apps, usage = usageSnapshot)
+    }
+
+    suspend fun refreshBackendLink(refreshWidgetsToo: Boolean = false): BackendStatus {
+        val status = fetchBackendStatus()
+        backendStatus = status
+        if (refreshWidgetsToo) {
+            widgets = refreshWidgets(status)
+        }
+        return status
     }
 
     fun executeNativeAction(query: String, action: NativeLauncherAction) {
@@ -196,6 +207,17 @@ fun LauncherApp(
         }
     }
 
+    fun buildOfflineReply(status: BackendStatus): BackendReply {
+        val detail = status.detail.ifBlank { "Backend unavailable" }
+        return BackendReply(
+            response = "Gemma backend is offline. Start backend/main.py on 127.0.0.1:1337, then tap Refresh Link and retry.",
+            traceSummary = listOf(
+                "launcher: backend offline",
+                "detail: $detail",
+            )
+        )
+    }
+
     fun sendMessage(message: String) {
         if (message.isBlank() || loading) return
         if (handleLauncherResolution(message)) return
@@ -209,11 +231,22 @@ fun LauncherApp(
         loading = true
         turns.add(ChatTurn(user = message, agent = "Working..."))
         scope.launch {
+            val status = if (backendStatus.online) backendStatus else refreshBackendLink()
+            if (!status.online) {
+                val reply = buildOfflineReply(status)
+                turns[turns.lastIndex] = ChatTurn(user = message, agent = reply.response)
+                lastTraceSummary = reply.traceSummary
+                loading = false
+                return@launch
+            }
             val reply = runCatching { backendChat(message) }.getOrElse {
-                BackendReply(
-                    response = "Connection failed. Start the backend on 127.0.0.1:1337.",
-                    traceSummary = listOf("exception: ${it.message}")
+                backendStatus = BackendStatus(
+                    checked = true,
+                    online = false,
+                    actorOnline = false,
+                    detail = it.message ?: "Backend unavailable",
                 )
+                buildOfflineReply(backendStatus)
             }
             turns[turns.lastIndex] = ChatTurn(user = message, agent = reply.response)
             lastTraceSummary = reply.traceSummary
@@ -237,7 +270,7 @@ fun LauncherApp(
             Column(modifier = Modifier.fillMaxSize()) {
                 TopStatusBar(
                     loading = loading,
-                    appCount = apps.size,
+                    backendStatus = backendStatus,
                     lastRoute = lastDecisionRoute,
                     onAgent = { overlay = OverlaySheet.Agent },
                     onPhone = { overlay = OverlaySheet.Phone },
@@ -286,6 +319,7 @@ fun LauncherApp(
                 CommandBar(
                     value = input,
                     loading = loading,
+                    backendStatus = backendStatus,
                     onValueChange = { input = it },
                     onSend = {
                         val outgoing = input
@@ -322,10 +356,14 @@ fun LauncherApp(
                 OverlaySheet.Agent -> AgentSheet(
                     turns = turns,
                     decisions = recentDecisions,
+                    backendStatus = backendStatus,
+                    onRefreshBackend = {
+                        scope.launch { refreshBackendLink(refreshWidgetsToo = true) }
+                    },
                     onRecall = { sendMessage("recall what you know about this project") }
                 )
                 OverlaySheet.Phone -> PhoneSheet(widgets = widgets, onRefresh = {
-                    scope.launch { widgets = refreshWidgets() }
+                    scope.launch { refreshBackendLink(refreshWidgetsToo = true) }
                 }, recentActivity = recentActivity, onQuickAction = { action ->
                     executeNativeAction(action.label, action)
                 })
@@ -343,7 +381,7 @@ fun LauncherApp(
 @Composable
 private fun TopStatusBar(
     loading: Boolean,
-    appCount: Int,
+    backendStatus: BackendStatus,
     lastRoute: String?,
     onAgent: () -> Unit,
     onPhone: () -> Unit,
@@ -359,8 +397,27 @@ private fun TopStatusBar(
         ) {
             Text("Gemma Launcher", color = Color.White, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatusChip(if (loading) "Busy" else "Idle")
-                StatusChip("$appCount apps")
+                if (loading) {
+                    StatusChip("Busy")
+                }
+                StatusChip(
+                    when {
+                        !backendStatus.checked -> "Checking Link"
+                        backendStatus.online -> "Gemma Online"
+                        else -> "Gemma Offline"
+                    },
+                    containerColor = when {
+                        !backendStatus.checked -> Color(0x33405D6C)
+                        backendStatus.online -> Color(0x33448F75)
+                        else -> Color(0x33644545)
+                    }
+                )
+                if (backendStatus.checked && backendStatus.online) {
+                    StatusChip(
+                        if (backendStatus.actorOnline) "Actor Ready" else "Actor Down",
+                        containerColor = if (backendStatus.actorOnline) Color(0x33306A58) else Color(0x33635B2D)
+                    )
+                }
                 if (!lastRoute.isNullOrBlank()) {
                     StatusChip("Last: $lastRoute")
                 }
@@ -549,9 +606,15 @@ private fun DockPlaceholder(modifier: Modifier = Modifier) {
 private fun CommandBar(
     value: String,
     loading: Boolean,
+    backendStatus: BackendStatus,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
 ) {
+    val hint = if (backendStatus.checked && !backendStatus.online) {
+        "Backend offline. Search apps or launch locally"
+    } else {
+        "Search apps or ask Gemma"
+    }
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xDD08141C))) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(10.dp),
@@ -561,8 +624,8 @@ private fun CommandBar(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.weight(1f),
-                label = { Text("Search apps or ask Gemma") },
-                placeholder = { Text("Search apps or ask Gemma") },
+                label = { Text(hint) },
+                placeholder = { Text(hint) },
                 enabled = !loading,
                 singleLine = true
             )
@@ -876,13 +939,20 @@ private fun AppIcon(app: LauncherEntry, modifier: Modifier = Modifier) {
 private fun AgentSheet(
     turns: List<ChatTurn>,
     decisions: List<LauncherDecisionRecord>,
+    backendStatus: BackendStatus,
+    onRefreshBackend: () -> Unit,
     onRecall: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Agent Layer", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-            TextButton(onClick = onRecall) { Text("Recall") }
+            Row {
+                TextButton(onClick = onRefreshBackend) { Text("Refresh Link") }
+                TextButton(onClick = onRecall) { Text("Recall") }
+            }
         }
+        Spacer(modifier = Modifier.height(12.dp))
+        BackendStatusCard(status = backendStatus)
         Spacer(modifier = Modifier.height(12.dp))
         if (decisions.isNotEmpty()) {
             Text("Recent Decisions", color = Color(0xFF6EE7D2), fontSize = 12.sp)
@@ -949,6 +1019,51 @@ private fun PhoneSheet(
 }
 
 @Composable
+private fun BackendStatusCard(status: BackendStatus) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0x44203846)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Gemma Link", color = Color.White, fontWeight = FontWeight.SemiBold)
+                StatusChip(
+                    when {
+                        !status.checked -> "Checking Link"
+                        status.online -> "Gemma Online"
+                        else -> "Gemma Offline"
+                    },
+                    containerColor = when {
+                        !status.checked -> Color(0x33405D6C)
+                        status.online -> Color(0x33448F75)
+                        else -> Color(0x33644545)
+                    }
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(status.detail, color = Color(0xFFC7D9E3))
+            if (status.checked && status.online) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    if (status.actorOnline) "Actor Ready" else "Actor Down",
+                    color = if (status.actorOnline) Color(0xFF8CEEDD) else Color(0xFFF8B84E),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                status.actorModel?.let { model ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(model, color = Color(0xFF7FA4B2), fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun DebugSheet(traceVisible: Boolean, onToggleTrace: () -> Unit, traceSummary: List<String>) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -963,10 +1078,13 @@ private fun DebugSheet(traceVisible: Boolean, onToggleTrace: () -> Unit, traceSu
 }
 
 @Composable
-private fun StatusChip(label: String) {
+private fun StatusChip(
+    label: String,
+    containerColor: Color = Color(0x332D4D5C),
+) {
     Box(
         modifier = Modifier
-            .background(Color(0x332D4D5C), RoundedCornerShape(999.dp))
+            .background(containerColor, RoundedCornerShape(999.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Text(label, color = Color(0xFFC7D9E3), fontSize = 11.sp)

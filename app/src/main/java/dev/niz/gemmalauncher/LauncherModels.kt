@@ -51,6 +51,14 @@ data class BackendReply(
     val traceSummary: List<String>,
 )
 
+data class BackendStatus(
+    val checked: Boolean = false,
+    val online: Boolean = false,
+    val actorOnline: Boolean = false,
+    val actorModel: String? = null,
+    val detail: String = "Checking launcher link.",
+)
+
 enum class OverlaySheet {
     Apps, Agent, Phone, Debug
 }
