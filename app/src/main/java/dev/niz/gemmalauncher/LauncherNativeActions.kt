@@ -83,6 +83,36 @@ fun resolveNativeLauncherAction(
     }?.action
 }
 
+fun rankNativeLauncherActions(message: String): List<NativeLauncherAction> {
+    val normalized = normalizeNativeActionText(message)
+    if (normalized.isBlank()) return emptyList()
+
+    return NATIVE_ACTION_PATTERNS
+        .map { pattern -> pattern.action to nativeActionScore(normalized, pattern) }
+        .filter { (_, score) -> score > 0 }
+        .sortedWith(
+            compareByDescending<Pair<NativeLauncherAction, Int>> { it.second }
+                .thenBy { it.first.label }
+        )
+        .map { it.first }
+        .distinct()
+}
+
+private fun nativeActionScore(
+    query: String,
+    pattern: NativeActionPattern,
+): Int {
+    return pattern.aliases.maxOfOrNull { alias ->
+        when {
+            query == alias -> 1000
+            alias.startsWith(query) -> 820
+            alias.contains(query) -> 620
+            query.startsWith(alias) -> 540
+            else -> 0
+        }
+    } ?: 0
+}
+
 private fun normalizeNativeActionText(value: String): String {
     return value
         .lowercase()

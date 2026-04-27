@@ -138,33 +138,44 @@ fun LauncherApp(
     }
     val recentDecisions = usageSnapshot.recentDecisions
     val lastDecisionRoute = recentDecisions.firstOrNull()?.route
+    val homeSuggestions = remember(input, apps, usageSnapshot) {
+        buildHomeInputSuggestions(query = input, apps = apps, usage = usageSnapshot)
+    }
+
+    fun executeNativeAction(query: String, action: NativeLauncherAction) {
+        recordNativeAction(action)
+        recordDecision(
+            LauncherDecisionRecord(
+                query = query,
+                route = "System",
+                detail = action.label,
+            )
+        )
+        turns.add(ChatTurn(user = query, agent = action.openingMessage))
+        launchNativeAction(action)
+    }
+
+    fun executeAppLaunch(query: String, entry: LauncherEntry) {
+        recordLaunch(entry)
+        recordDecision(
+            LauncherDecisionRecord(
+                query = query,
+                route = "App",
+                detail = entry.label,
+            )
+        )
+        turns.add(ChatTurn(user = query, agent = "Opening ${entry.label}."))
+        launchApp(entry)
+    }
 
     fun handleLauncherResolution(message: String): Boolean {
         return when (val resolution = resolveHomeIntent(message = message, apps = apps, usage = usageSnapshot)) {
             is HomeIntentResolution.LaunchNativeAction -> {
-                recordNativeAction(resolution.action)
-                recordDecision(
-                    LauncherDecisionRecord(
-                        query = message,
-                        route = "System",
-                        detail = resolution.action.label,
-                    )
-                )
-                turns.add(ChatTurn(user = message, agent = resolution.action.openingMessage))
-                launchNativeAction(resolution.action)
+                executeNativeAction(message, resolution.action)
                 true
             }
             is HomeIntentResolution.LaunchApp -> {
-                recordLaunch(resolution.entry)
-                recordDecision(
-                    LauncherDecisionRecord(
-                        query = message,
-                        route = "App",
-                        detail = resolution.entry.label,
-                    )
-                )
-                turns.add(ChatTurn(user = message, agent = "Opening ${resolution.entry.label}."))
-                launchApp(resolution.entry)
+                executeAppLaunch(message, resolution.entry)
                 true
             }
             is HomeIntentResolution.OpenDrawer -> {
@@ -235,18 +246,7 @@ fun LauncherApp(
                 Spacer(modifier = Modifier.height(10.dp))
                 HomeHero(
                     recentActivity = recentActivity,
-                    onQuickAction = { action ->
-                        recordNativeAction(action)
-                        recordDecision(
-                            LauncherDecisionRecord(
-                                query = action.label,
-                                route = "System",
-                                detail = action.label,
-                            )
-                        )
-                        turns.add(ChatTurn(user = action.label, agent = action.openingMessage))
-                        launchNativeAction(action)
-                    }
+                    onQuickAction = { action -> executeNativeAction(action.label, action) }
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 ChatHome(turns = turns, traceVisible = traceVisible, lastTraceSummary = lastTraceSummary)
@@ -264,6 +264,25 @@ fun LauncherApp(
                     }
                 )
                 Spacer(modifier = Modifier.height(10.dp))
+                if (homeSuggestions.isNotEmpty()) {
+                    HomeInputSuggestionRow(
+                        suggestions = homeSuggestions,
+                        onSelect = { suggestion ->
+                            val query = input.trim().ifBlank {
+                                when (suggestion) {
+                                    is HomeInputSuggestion.App -> suggestion.entry.label
+                                    is HomeInputSuggestion.Native -> suggestion.action.label
+                                }
+                            }
+                            input = ""
+                            when (suggestion) {
+                                is HomeInputSuggestion.App -> executeAppLaunch(query, suggestion.entry)
+                                is HomeInputSuggestion.Native -> executeNativeAction(query, suggestion.action)
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
                 CommandBar(
                     value = input,
                     loading = loading,
@@ -308,16 +327,7 @@ fun LauncherApp(
                 OverlaySheet.Phone -> PhoneSheet(widgets = widgets, onRefresh = {
                     scope.launch { widgets = refreshWidgets() }
                 }, recentActivity = recentActivity, onQuickAction = { action ->
-                    recordNativeAction(action)
-                    recordDecision(
-                        LauncherDecisionRecord(
-                            query = action.label,
-                            route = "System",
-                            detail = action.label,
-                        )
-                    )
-                    turns.add(ChatTurn(user = action.label, agent = action.openingMessage))
-                    launchNativeAction(action)
+                    executeNativeAction(action.label, action)
                 })
                 OverlaySheet.Debug -> DebugSheet(
                     traceVisible = traceVisible,
@@ -558,6 +568,40 @@ private fun CommandBar(
             )
             IconButton(onClick = onSend, enabled = !loading && value.isNotBlank()) {
                 Icon(Icons.Rounded.Search, contentDescription = "Send", tint = Color(0xFF6EE7D2))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeInputSuggestionRow(
+    suggestions: List<HomeInputSuggestion>,
+    onSelect: (HomeInputSuggestion) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        suggestions.take(2).forEach { suggestion ->
+            Card(
+                modifier = Modifier.weight(1f).clickable { onSelect(suggestion) },
+                colors = CardDefaults.cardColors(containerColor = Color(0x44203846))
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    when (suggestion) {
+                        is HomeInputSuggestion.App -> {
+                            Text("App Match", color = Color(0xFF6EE7D2), fontSize = 11.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(suggestion.entry.label, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(suggestion.entry.category.label, color = Color(0xFF7FA4B2), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        is HomeInputSuggestion.Native -> {
+                            Text("System Action", color = Color(0xFF6EE7D2), fontSize = 11.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(suggestion.action.label, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("Native launcher path", color = Color(0xFF7FA4B2), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
             }
         }
     }
@@ -1032,6 +1076,11 @@ private val HOME_QUICK_ACTIONS = listOf(
     NativeLauncherAction.Camera,
 )
 
+private sealed interface HomeInputSuggestion {
+    data class App(val entry: LauncherEntry) : HomeInputSuggestion
+    data class Native(val action: NativeLauncherAction) : HomeInputSuggestion
+}
+
 private data class LauncherActivityItem(
     val title: String,
     val subtitle: String,
@@ -1065,4 +1114,32 @@ private fun buildRecentActivityItems(
             else -> null
         }
     }
+}
+
+private fun buildHomeInputSuggestions(
+    query: String,
+    apps: List<LauncherEntry>,
+    usage: LauncherUsageSnapshot,
+): List<HomeInputSuggestion> {
+    val normalized = query.trim()
+    if (normalized.length < 2 || normalized.endsWith("?")) return emptyList()
+    if (normalized.split(" ").count { it.isNotBlank() } > 4) return emptyList()
+
+    val nativeActions = rankNativeLauncherActions(normalized).take(1)
+    val nativeSuggestions = nativeActions.map { HomeInputSuggestion.Native(it) }
+
+    val hiddenLabels = nativeActions
+        .map { action -> normalizeLauncherLabel(action.label) }
+        .toSet()
+
+    val appSuggestions = rankAppsForQuery(normalized, apps, usage)
+        .filterNot { normalizeLauncherLabel(it.label) in hiddenLabels }
+        .take(if (nativeSuggestions.isEmpty()) 2 else 1)
+        .map { HomeInputSuggestion.App(it) }
+
+    return (nativeSuggestions + appSuggestions).take(2)
+}
+
+private fun normalizeLauncherLabel(value: String): String {
+    return value.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim().replace(Regex("\\s+"), " ")
 }

@@ -68,4 +68,16 @@ class LauncherResolverTest {
         assertTrue(resolution is HomeIntentResolution.SendToAgent)
         assertEquals("battery", (resolution as HomeIntentResolution.SendToAgent).message)
     }
+
+    @Test
+    fun nativeActionRankingSurfacesWifiFromPrefix() {
+        val ranked = rankNativeLauncherActions("wi")
+        assertEquals(NativeLauncherAction.Wifi, ranked.first())
+    }
+
+    @Test
+    fun nativeActionRankingSurfacesNotificationsFromPrefix() {
+        val ranked = rankNativeLauncherActions("notif")
+        assertEquals(NativeLauncherAction.Notifications, ranked.first())
+    }
 }
