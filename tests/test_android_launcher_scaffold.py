@@ -22,8 +22,10 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "app/src/main/java/dev/niz/gemmalauncher/LauncherUi.kt",
             "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherModels.kt",
+            "app/src/main/java/dev/niz/gemmalauncher/LauncherCatalog.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt",
+            "app/src/test/java/dev/niz/gemmalauncher/LauncherCatalogTest.kt",
             "app/src/test/java/dev/niz/gemmalauncher/LauncherResolverTest.kt",
             "tools/check_android_launcher_env.sh",
             "tools/bootstrap_android_sdk.sh",
@@ -63,8 +65,11 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("Search apps", ui)
         self.assertIn("LauncherDock", ui)
         self.assertIn("DockApp", ui)
+        self.assertIn("BestMatchCard", ui)
+        self.assertIn("CategorySectionHeader", ui)
         self.assertIn("Pinned Apps", ui)
-        self.assertIn("Top Matches", ui)
+        self.assertIn("Best Match", ui)
+        self.assertIn("Other Matches", ui)
         self.assertIn("Search apps or ask Gemma", ui)
         self.assertIn("OverlaySheet.Apps", ui)
         self.assertIn("Recent Apps", ui)
@@ -76,8 +81,10 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         activity = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/MainActivity.kt").read_text()
         self.assertIn("JSONObject", backend_client)
         self.assertIn("getIcon(0)", activity)
+        self.assertIn("inferLauncherCategory", activity)
 
     def test_launcher_has_resolver_and_usage_store(self):
+        catalog = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherCatalog.kt").read_text()
         resolver = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt").read_text()
         usage_store = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt").read_text()
         self.assertIn('listOf("open ", "launch ", "start ")', resolver)
@@ -87,6 +94,9 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("aliasTerms", resolver)
         self.assertIn("resolveHomeIntent", resolver)
         self.assertIn("rankAppsForQuery", resolver)
+        self.assertIn("inferLauncherCategory", catalog)
+        self.assertIn("buildCategorySections", catalog)
+        self.assertIn("LauncherCategory", catalog)
         self.assertIn("getSharedPreferences", usage_store)
         self.assertIn("recordLaunch", usage_store)
         self.assertIn("togglePinned", usage_store)

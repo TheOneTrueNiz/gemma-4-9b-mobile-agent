@@ -2,9 +2,22 @@ package dev.niz.gemmalauncher
 
 import android.graphics.drawable.Drawable
 
+enum class LauncherCategory(val label: String) {
+    Communication("Communication"),
+    Web("Web"),
+    Media("Media"),
+    Tools("Tools"),
+    System("System"),
+    Travel("Travel"),
+    Work("Work"),
+    AI("AI"),
+    Other("Other"),
+}
+
 data class LauncherEntry(
     val label: String,
     val packageName: String,
+    val category: LauncherCategory = LauncherCategory.Other,
     val icon: Drawable? = null,
 )
 

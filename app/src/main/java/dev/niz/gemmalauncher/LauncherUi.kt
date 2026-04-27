@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -470,14 +471,30 @@ private fun AppDrawerSheet(
     launchApp: (LauncherEntry) -> Unit
 ) {
     var query by remember(initialQuery) { mutableStateOf(initialQuery) }
+    val normalizedQuery = query.trim().lowercase()
     val visibleApps = remember(apps, query, usage) {
-        val trimmed = query.trim().lowercase()
-        if (trimmed.isBlank()) {
+        if (normalizedQuery.isBlank()) {
             apps
         } else {
-            rankAppsForQuery(trimmed, apps, usage)
+            rankAppsForQuery(normalizedQuery, apps, usage)
         }
     }
+    val categorySections = remember(apps, usage) {
+        buildCategorySections(apps, usage)
+    }
+    val rankedSuggestions = remember(suggestedApps, visibleApps, normalizedQuery) {
+        if (normalizedQuery.isBlank()) {
+            emptyList()
+        } else {
+            (suggestedApps + visibleApps)
+                .distinctBy { it.packageName }
+                .take(5)
+        }
+    }
+    val bestMatch = rankedSuggestions.firstOrNull()
+    val alternativeMatches = rankedSuggestions.drop(1)
+    val hiddenPackages = rankedSuggestions.map { it.packageName }.toSet()
+    val remainingQueryApps = visibleApps.filterNot { it.packageName in hiddenPackages }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text("App Drawer", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
@@ -490,18 +507,27 @@ private fun AppDrawerSheet(
             label = { Text("Search apps") }
         )
         Spacer(modifier = Modifier.height(12.dp))
-        if (query.isNotBlank() && suggestedApps.isNotEmpty()) {
-            Text("Top Matches", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+        if (normalizedQuery.isNotBlank() && bestMatch != null) {
+            BestMatchCard(
+                app = bestMatch,
+                pinned = bestMatch.packageName in usage.pinnedPackages,
+                onLaunch = { launchApp(bestMatch) },
+                onTogglePinned = { onTogglePinned(bestMatch) }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+        if (normalizedQuery.isNotBlank() && alternativeMatches.isNotEmpty()) {
+            Text("Other Matches", color = Color(0xFF6EE7D2), fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))
             LazyRowRecentApps(
-                recentApps = suggestedApps,
+                recentApps = alternativeMatches,
                 launchApp = launchApp,
                 onTogglePinned = onTogglePinned,
                 pinnedPackages = usage.pinnedPackages
             )
             Spacer(modifier = Modifier.height(12.dp))
         }
-        if (query.isBlank() && pinnedApps.isNotEmpty()) {
+        if (normalizedQuery.isBlank() && pinnedApps.isNotEmpty()) {
             Text("Pinned Apps", color = Color(0xFF6EE7D2), fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))
             LazyRowRecentApps(
@@ -512,7 +538,7 @@ private fun AppDrawerSheet(
             )
             Spacer(modifier = Modifier.height(12.dp))
         }
-        if (query.isBlank() && recentApps.isNotEmpty()) {
+        if (normalizedQuery.isBlank() && recentApps.isNotEmpty()) {
             Text("Recent Apps", color = Color(0xFF6EE7D2), fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))
             LazyRowRecentApps(
@@ -524,13 +550,29 @@ private fun AppDrawerSheet(
             Spacer(modifier = Modifier.height(12.dp))
         }
         LazyVerticalGrid(columns = GridCells.Fixed(4), modifier = Modifier.height(420.dp)) {
-            items(visibleApps, key = { it.packageName }) { app ->
-                AppIconTile(
-                    app = app,
-                    pinned = app.packageName in usage.pinnedPackages,
-                    onClick = { launchApp(app) },
-                    onTogglePinned = { onTogglePinned(app) }
-                )
+            if (normalizedQuery.isBlank()) {
+                categorySections.forEach { (category, sectionApps) ->
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        CategorySectionHeader(category)
+                    }
+                    items(sectionApps, key = { it.packageName }) { app ->
+                        AppIconTile(
+                            app = app,
+                            pinned = app.packageName in usage.pinnedPackages,
+                            onClick = { launchApp(app) },
+                            onTogglePinned = { onTogglePinned(app) }
+                        )
+                    }
+                }
+            } else {
+                items(remainingQueryApps, key = { it.packageName }) { app ->
+                    AppIconTile(
+                        app = app,
+                        pinned = app.packageName in usage.pinnedPackages,
+                        onClick = { launchApp(app) },
+                        onTogglePinned = { onTogglePinned(app) }
+                    )
+                }
             }
         }
     }
@@ -575,6 +617,57 @@ private fun LazyRowRecentApps(
 }
 
 @Composable
+private fun BestMatchCard(
+    app: LauncherEntry,
+    pinned: Boolean,
+    onLaunch: () -> Unit,
+    onTogglePinned: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onLaunch),
+        colors = CardDefaults.cardColors(containerColor = Color(0x44305A4A))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppIcon(app = app, modifier = Modifier.size(52.dp))
+            Spacer(modifier = Modifier.size(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Best Match", color = Color(0xFF6EE7D2), fontSize = 11.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(app.label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(app.category.label, color = Color(0xFFC7D9E3), fontSize = 12.sp)
+            }
+            IconButton(onClick = onTogglePinned) {
+                Icon(
+                    Icons.Rounded.PushPin,
+                    contentDescription = "Pin ${app.label}",
+                    tint = if (pinned) Color(0xFF6EE7D2) else Color(0xFF5A7380)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategorySectionHeader(category: LauncherCategory) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(category.label, color = Color(0xFF6EE7D2), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
 private fun AppIconTile(
     app: LauncherEntry,
     pinned: Boolean,
@@ -590,6 +683,8 @@ private fun AppIconTile(
             AppIcon(app = app, modifier = Modifier.size(52.dp))
             Spacer(modifier = Modifier.height(6.dp))
             Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(app.category.label, color = Color(0xFF7FA4B2), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(
             onClick = onTogglePinned,

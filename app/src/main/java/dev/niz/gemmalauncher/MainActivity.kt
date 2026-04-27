@@ -39,9 +39,11 @@ class MainActivity : ComponentActivity() {
 }
 
 private fun LauncherActivityInfo.toEntry(): LauncherEntry {
+    val resolvedLabel = label?.toString() ?: applicationInfo.packageName
     return LauncherEntry(
-        label = label?.toString() ?: applicationInfo.packageName,
+        label = resolvedLabel,
         packageName = applicationInfo.packageName,
+        category = inferLauncherCategory(resolvedLabel, applicationInfo.packageName),
         icon = getIcon(0)
     )
 }
