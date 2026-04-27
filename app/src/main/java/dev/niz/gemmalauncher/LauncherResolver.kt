@@ -34,15 +34,25 @@ fun resolveHomeIntent(
         return HomeIntentResolution.SendToAgent(message)
     }
 
+    resolveNativeLauncherAction(raw, explicit = false)?.let { action ->
+        return HomeIntentResolution.LaunchNativeAction(action = action, query = raw)
+    }
+
     extractDrawerQuery(raw)?.let { query ->
         return resolveDrawerQuery(query, apps, usage)
     }
 
     extractLaunchQuery(raw)?.let { query ->
+        resolveNativeLauncherAction(query, explicit = true)?.let { action ->
+            return HomeIntentResolution.LaunchNativeAction(action = action, query = query)
+        }
         return resolveAppLaunchQuery(query, apps, usage, explicit = true)
     }
 
     if (looksLikeLauncherQuery(raw)) {
+        resolveNativeLauncherAction(raw, explicit = false)?.let { action ->
+            return HomeIntentResolution.LaunchNativeAction(action = action, query = raw)
+        }
         return resolveAppLaunchQuery(raw, apps, usage, explicit = false)
     }
 

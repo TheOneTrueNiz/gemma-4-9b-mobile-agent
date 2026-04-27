@@ -48,6 +48,11 @@ enum class OverlaySheet {
 }
 
 sealed interface HomeIntentResolution {
+    data class LaunchNativeAction(
+        val action: NativeLauncherAction,
+        val query: String,
+    ) : HomeIntentResolution
+
     data class LaunchApp(
         val entry: LauncherEntry,
         val query: String,

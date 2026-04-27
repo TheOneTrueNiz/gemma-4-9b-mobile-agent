@@ -68,6 +68,7 @@ fun LauncherApp(
     appSource: () -> List<LauncherEntry>,
     usageStore: LauncherUsageStore,
     launchApp: (LauncherEntry) -> Unit,
+    launchNativeAction: (NativeLauncherAction) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -124,6 +125,11 @@ fun LauncherApp(
 
     fun handleLauncherResolution(message: String): Boolean {
         return when (val resolution = resolveHomeIntent(message = message, apps = apps, usage = usageSnapshot)) {
+            is HomeIntentResolution.LaunchNativeAction -> {
+                turns.add(ChatTurn(user = message, agent = resolution.action.openingMessage))
+                launchNativeAction(resolution.action)
+                true
+            }
             is HomeIntentResolution.LaunchApp -> {
                 recordLaunch(resolution.entry)
                 turns.add(ChatTurn(user = message, agent = "Opening ${resolution.entry.label}."))

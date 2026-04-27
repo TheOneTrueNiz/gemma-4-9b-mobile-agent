@@ -23,6 +23,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "app/src/main/java/dev/niz/gemmalauncher/BackendClient.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherModels.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherCatalog.kt",
+            "app/src/main/java/dev/niz/gemmalauncher/LauncherNativeActions.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt",
             "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt",
             "app/src/test/java/dev/niz/gemmalauncher/LauncherCatalogTest.kt",
@@ -82,9 +83,13 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("JSONObject", backend_client)
         self.assertIn("getIcon(0)", activity)
         self.assertIn("inferLauncherCategory", activity)
+        self.assertIn("launchNativeAction", activity)
+        self.assertIn("Settings.Panel.ACTION_INTERNET_CONNECTIVITY", activity)
+        self.assertIn("MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA", activity)
 
     def test_launcher_has_resolver_and_usage_store(self):
         catalog = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherCatalog.kt").read_text()
+        native_actions = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherNativeActions.kt").read_text()
         resolver = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherResolver.kt").read_text()
         usage_store = (ROOT / "app/src/main/java/dev/niz/gemmalauncher/LauncherUsageStore.kt").read_text()
         self.assertIn('listOf("open ", "launch ", "start ")', resolver)
@@ -92,11 +97,17 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn('find app ', resolver)
         self.assertIn("fuzzyScore", resolver)
         self.assertIn("aliasTerms", resolver)
+        self.assertIn("resolveNativeLauncherAction", resolver)
+        self.assertIn("LaunchNativeAction", resolver)
         self.assertIn("resolveHomeIntent", resolver)
         self.assertIn("rankAppsForQuery", resolver)
         self.assertIn("inferLauncherCategory", catalog)
         self.assertIn("buildCategorySections", catalog)
         self.assertIn("LauncherCategory", catalog)
+        self.assertIn("NativeLauncherAction", native_actions)
+        self.assertIn("openingMessage", native_actions)
+        self.assertIn("Settings", native_actions)
+        self.assertIn("Camera", native_actions)
         self.assertIn("getSharedPreferences", usage_store)
         self.assertIn("recordLaunch", usage_store)
         self.assertIn("togglePinned", usage_store)

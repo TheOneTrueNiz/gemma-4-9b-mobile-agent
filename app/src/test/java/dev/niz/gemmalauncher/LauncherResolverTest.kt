@@ -27,6 +27,27 @@ class LauncherResolverTest {
     }
 
     @Test
+    fun openWifiResolvesToNativeAction() {
+        val resolution = resolveHomeIntent("open wifi", apps, usage)
+        assertTrue(resolution is HomeIntentResolution.LaunchNativeAction)
+        assertEquals(NativeLauncherAction.Wifi, (resolution as HomeIntentResolution.LaunchNativeAction).action)
+    }
+
+    @Test
+    fun showNotificationsResolvesToNativeAction() {
+        val resolution = resolveHomeIntent("show notifications", apps, usage)
+        assertTrue(resolution is HomeIntentResolution.LaunchNativeAction)
+        assertEquals(NativeLauncherAction.Notifications, (resolution as HomeIntentResolution.LaunchNativeAction).action)
+    }
+
+    @Test
+    fun openCameraUsesNativeIntentPath() {
+        val resolution = resolveHomeIntent("open camera", apps, usage)
+        assertTrue(resolution is HomeIntentResolution.LaunchNativeAction)
+        assertEquals(NativeLauncherAction.Camera, (resolution as HomeIntentResolution.LaunchNativeAction).action)
+    }
+
+    @Test
     fun typoStillRanksSettingsFirst() {
         val ranked = rankAppsForQuery("setings", apps, usage)
         assertEquals("com.android.settings", ranked.first().packageName)
