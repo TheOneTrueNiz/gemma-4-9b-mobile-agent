@@ -68,9 +68,13 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("DockApp", ui)
         self.assertIn("BestMatchCard", ui)
         self.assertIn("CategorySectionHeader", ui)
+        self.assertIn("QuickActionRow", ui)
+        self.assertIn("RecentActivityCard", ui)
         self.assertIn("Pinned Apps", ui)
         self.assertIn("Best Match", ui)
         self.assertIn("Other Matches", ui)
+        self.assertIn("Quick Actions", ui)
+        self.assertIn("Recent Activity", ui)
         self.assertIn("Search apps or ask Gemma", ui)
         self.assertIn("OverlaySheet.Apps", ui)
         self.assertIn("Recent Apps", ui)
@@ -110,6 +114,8 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("Camera", native_actions)
         self.assertIn("getSharedPreferences", usage_store)
         self.assertIn("recordLaunch", usage_store)
+        self.assertIn("recordNativeAction", usage_store)
+        self.assertIn("recent_activity", usage_store)
         self.assertIn("togglePinned", usage_store)
 
     def test_wrapper_and_build_scripts_are_wired(self):

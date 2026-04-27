@@ -111,6 +111,11 @@ fun LauncherApp(
         usageSnapshot = usageStore.snapshot()
     }
 
+    fun recordNativeAction(action: NativeLauncherAction) {
+        usageStore.recordNativeAction(action)
+        usageSnapshot = usageStore.snapshot()
+    }
+
     fun togglePinned(entry: LauncherEntry) {
         usageStore.togglePinned(entry.packageName)
         usageSnapshot = usageStore.snapshot()
@@ -122,10 +127,14 @@ fun LauncherApp(
     val dockApps = remember(apps, usageSnapshot) {
         buildDockApps(apps = apps, usage = usageSnapshot)
     }
+    val recentActivity = remember(apps, usageSnapshot) {
+        buildRecentActivityItems(apps = apps, usage = usageSnapshot)
+    }
 
     fun handleLauncherResolution(message: String): Boolean {
         return when (val resolution = resolveHomeIntent(message = message, apps = apps, usage = usageSnapshot)) {
             is HomeIntentResolution.LaunchNativeAction -> {
+                recordNativeAction(resolution.action)
                 turns.add(ChatTurn(user = message, agent = resolution.action.openingMessage))
                 launchNativeAction(resolution.action)
                 true
@@ -187,7 +196,14 @@ fun LauncherApp(
                     onDebug = { overlay = OverlaySheet.Debug }
                 )
                 Spacer(modifier = Modifier.height(10.dp))
-                HomeHero()
+                HomeHero(
+                    recentActivity = recentActivity,
+                    onQuickAction = { action ->
+                        recordNativeAction(action)
+                        turns.add(ChatTurn(user = action.label, agent = action.openingMessage))
+                        launchNativeAction(action)
+                    }
+                )
                 Spacer(modifier = Modifier.height(10.dp))
                 ChatHome(turns = turns, traceVisible = traceVisible, lastTraceSummary = lastTraceSummary)
                 Spacer(modifier = Modifier.height(10.dp))
@@ -243,6 +259,10 @@ fun LauncherApp(
                 OverlaySheet.Agent -> AgentSheet(turns = turns, onRecall = { sendMessage("recall what you know about this project") })
                 OverlaySheet.Phone -> PhoneSheet(widgets = widgets, onRefresh = {
                     scope.launch { widgets = refreshWidgets() }
+                }, recentActivity = recentActivity, onQuickAction = { action ->
+                    recordNativeAction(action)
+                    turns.add(ChatTurn(user = action.label, agent = action.openingMessage))
+                    launchNativeAction(action)
                 })
                 OverlaySheet.Debug -> DebugSheet(
                     traceVisible = traceVisible,
@@ -290,7 +310,10 @@ private fun TopStatusBar(
 }
 
 @Composable
-private fun HomeHero() {
+private fun HomeHero(
+    recentActivity: List<LauncherActivityItem>,
+    onQuickAction: (NativeLauncherAction) -> Unit,
+) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xAA0E212C))) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text("Home Screen", color = Color(0xFF6EE7D2), fontSize = 11.sp)
@@ -302,6 +325,22 @@ private fun HomeHero() {
                 color = Color(0xFFC7D9E3),
                 lineHeight = 20.sp
             )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Quick Actions", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            QuickActionRow(
+                actions = HOME_QUICK_ACTIONS,
+                onQuickAction = onQuickAction
+            )
+            if (recentActivity.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Recent Activity", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                recentActivity.take(4).forEach { activity ->
+                    RecentActivityCard(activity = activity)
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+            }
         }
     }
 }
@@ -753,12 +792,24 @@ private fun AgentSheet(turns: List<ChatTurn>, onRecall: () -> Unit) {
 }
 
 @Composable
-private fun PhoneSheet(widgets: List<WidgetState>, onRefresh: () -> Unit) {
+private fun PhoneSheet(
+    widgets: List<WidgetState>,
+    onRefresh: () -> Unit,
+    recentActivity: List<LauncherActivityItem>,
+    onQuickAction: (NativeLauncherAction) -> Unit,
+) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Phone Layer", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
             TextButton(onClick = onRefresh) { Text("Refresh") }
         }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("Quick Actions", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        QuickActionRow(
+            actions = HOME_QUICK_ACTIONS,
+            onQuickAction = onQuickAction
+        )
         Spacer(modifier = Modifier.height(12.dp))
         widgets.forEach { widget ->
             Card(colors = CardDefaults.cardColors(containerColor = Color(0x44203846)), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -767,6 +818,15 @@ private fun PhoneSheet(widgets: List<WidgetState>, onRefresh: () -> Unit) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(widget.value, color = Color.White)
                 }
+            }
+        }
+        if (recentActivity.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Recent Launcher Activity", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            recentActivity.take(5).forEach { activity ->
+                RecentActivityCard(activity = activity)
+                Spacer(modifier = Modifier.height(6.dp))
             }
         }
     }
@@ -797,6 +857,49 @@ private fun StatusChip(label: String) {
     }
 }
 
+@Composable
+private fun QuickActionRow(
+    actions: List<NativeLauncherAction>,
+    onQuickAction: (NativeLauncherAction) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        actions.forEach { action ->
+            Card(
+                modifier = Modifier.weight(1f).clickable { onQuickAction(action) },
+                colors = CardDefaults.cardColors(containerColor = Color(0x44203846))
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(action.label, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentActivityCard(activity: LauncherActivityItem) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0x44203846)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(activity.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(activity.subtitle, color = Color(0xFF7FA4B2), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            StatusChip(activity.kind)
+        }
+    }
+}
+
 private fun buildDockApps(apps: List<LauncherEntry>, usage: LauncherUsageSnapshot): List<LauncherEntry> {
     val pinned = usage.pinnedPackages.mapNotNull { pkg ->
         apps.firstOrNull { it.packageName == pkg }
@@ -813,4 +916,46 @@ private fun buildDockApps(apps: List<LauncherEntry>, usage: LauncherUsageSnapsho
         recent.forEach(::add)
         frequent.forEach(::add)
     }.distinctBy { it.packageName }.take(4)
+}
+
+private val HOME_QUICK_ACTIONS = listOf(
+    NativeLauncherAction.Wifi,
+    NativeLauncherAction.Bluetooth,
+    NativeLauncherAction.Notifications,
+    NativeLauncherAction.Camera,
+)
+
+private data class LauncherActivityItem(
+    val title: String,
+    val subtitle: String,
+    val kind: String,
+)
+
+private fun buildRecentActivityItems(
+    apps: List<LauncherEntry>,
+    usage: LauncherUsageSnapshot,
+): List<LauncherActivityItem> {
+    return usage.recentActivityKeys.mapNotNull { key ->
+        when {
+            key.startsWith("app:") -> {
+                val packageName = key.removePrefix("app:")
+                val app = apps.firstOrNull { it.packageName == packageName } ?: return@mapNotNull null
+                LauncherActivityItem(
+                    title = app.label,
+                    subtitle = app.category.label,
+                    kind = "App"
+                )
+            }
+            key.startsWith("native:") -> {
+                val actionName = key.removePrefix("native:")
+                val action = runCatching { NativeLauncherAction.valueOf(actionName) }.getOrNull() ?: return@mapNotNull null
+                LauncherActivityItem(
+                    title = action.label,
+                    subtitle = "System action",
+                    kind = "System"
+                )
+            }
+            else -> null
+        }
+    }
 }

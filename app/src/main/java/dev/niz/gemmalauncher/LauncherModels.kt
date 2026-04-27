@@ -25,6 +25,7 @@ data class LauncherUsageSnapshot(
     val launchCounts: Map<String, Int> = emptyMap(),
     val recentPackages: List<String> = emptyList(),
     val pinnedPackages: List<String> = emptyList(),
+    val recentActivityKeys: List<String> = emptyList(),
 )
 
 data class ChatTurn(

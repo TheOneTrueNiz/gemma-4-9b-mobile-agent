@@ -11,10 +11,12 @@ class LauncherUsageStore(context: Context) {
         val counts = prefs.getString(KEY_LAUNCH_COUNTS, "{}").orEmpty()
         val recents = prefs.getString(KEY_RECENT_PACKAGES, "[]").orEmpty()
         val pinned = prefs.getString(KEY_PINNED_PACKAGES, "[]").orEmpty()
+        val recentActivity = prefs.getString(KEY_RECENT_ACTIVITY, "[]").orEmpty()
         return LauncherUsageSnapshot(
             launchCounts = counts.toCountMap(),
             recentPackages = recents.toStringList(),
             pinnedPackages = pinned.toStringList(),
+            recentActivityKeys = recentActivity.toStringList(),
         )
     }
 
@@ -27,10 +29,27 @@ class LauncherUsageStore(context: Context) {
             add(packageName)
             snap.recentPackages.filterNot { it == packageName }.take(MAX_RECENTS - 1).forEach(::add)
         }
+        val updatedActivity = buildRecentActivity(
+            key = "app:$packageName",
+            existing = snap.recentActivityKeys,
+        )
 
         prefs.edit()
             .putString(KEY_LAUNCH_COUNTS, JSONObject(updatedCounts as Map<*, *>).toString())
             .putString(KEY_RECENT_PACKAGES, JSONArray(updatedRecents).toString())
+            .putString(KEY_RECENT_ACTIVITY, JSONArray(updatedActivity).toString())
+            .apply()
+    }
+
+    fun recordNativeAction(action: NativeLauncherAction) {
+        val snap = snapshot()
+        val updatedActivity = buildRecentActivity(
+            key = "native:${action.name}",
+            existing = snap.recentActivityKeys,
+        )
+
+        prefs.edit()
+            .putString(KEY_RECENT_ACTIVITY, JSONArray(updatedActivity).toString())
             .apply()
     }
 
@@ -55,8 +74,17 @@ class LauncherUsageStore(context: Context) {
         private const val KEY_LAUNCH_COUNTS = "launch_counts"
         private const val KEY_RECENT_PACKAGES = "recent_packages"
         private const val KEY_PINNED_PACKAGES = "pinned_packages"
+        private const val KEY_RECENT_ACTIVITY = "recent_activity"
         private const val MAX_RECENTS = 8
         private const val MAX_PINNED = 4
+        private const val MAX_ACTIVITY = 10
+
+        private fun buildRecentActivity(key: String, existing: List<String>): List<String> {
+            return buildList {
+                add(key)
+                existing.filterNot { it == key }.take(MAX_ACTIVITY - 1).forEach(::add)
+            }
+        }
     }
 }
 
