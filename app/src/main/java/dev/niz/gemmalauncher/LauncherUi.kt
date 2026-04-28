@@ -83,7 +83,9 @@ fun LauncherApp(
         mutableStateListOf(
             ChatTurn(
                 user = "",
-                agent = "Gemma Launcher is ready. Local app and system routing works immediately. Agent responses depend on the local backend."
+                agent = "Gemma Launcher is ready. Local app and system routing works immediately. Agent responses depend on the local backend.",
+                route = "Launcher",
+                routeDetail = "Home shell active",
             )
         )
     }
@@ -161,7 +163,14 @@ fun LauncherApp(
                 detail = action.label,
             )
         )
-        turns.add(ChatTurn(user = query, agent = action.openingMessage))
+        turns.add(
+            ChatTurn(
+                user = query,
+                agent = action.openingMessage,
+                route = "Phone",
+                routeDetail = "Native system action",
+            )
+        )
         launchNativeAction(action)
     }
 
@@ -174,7 +183,14 @@ fun LauncherApp(
                 detail = entry.label,
             )
         )
-        turns.add(ChatTurn(user = query, agent = "Opening ${entry.label}."))
+        turns.add(
+            ChatTurn(
+                user = query,
+                agent = "Opening ${entry.label}.",
+                route = "App",
+                routeDetail = entry.label,
+            )
+        )
         launchApp(entry)
     }
 
@@ -199,7 +215,14 @@ fun LauncherApp(
                 drawerQuery = resolution.query
                 drawerSuggestions = resolution.suggestions
                 overlay = OverlaySheet.Apps
-                turns.add(ChatTurn(user = message, agent = resolution.message))
+                turns.add(
+                    ChatTurn(
+                        user = message,
+                        agent = resolution.message,
+                        route = "Drawer",
+                        routeDetail = "Ranked app matches",
+                    )
+                )
                 true
             }
             is HomeIntentResolution.SendToAgent -> false
@@ -218,7 +241,14 @@ fun LauncherApp(
             )
         )
         if (addTurn) {
-            turns.add(ChatTurn(user = userLabel, agent = bridgeMessage))
+            turns.add(
+                ChatTurn(
+                    user = userLabel,
+                    agent = bridgeMessage,
+                    route = "Launcher",
+                    routeDetail = "Backend control",
+                )
+            )
         }
         lastTraceSummary = listOf(
             "launcher: $bridgeMessage",
@@ -272,18 +302,52 @@ fun LauncherApp(
         widgets = refreshWidgets(backendStatus)
     }
 
-    fun sendMessage(message: String) {
+    fun backendRouteForReply(reply: BackendReply, forcedGemma: Boolean): Pair<String, String> {
+        return when (reply.mode) {
+            "fast_path" -> {
+                if (forcedGemma) {
+                    "Native" to "Gemma request via deterministic tool"
+                } else {
+                    "Native" to "Deterministic tool route"
+                }
+            }
+            else -> {
+                if (forcedGemma) {
+                    "Gemma" to "Explicit Gemma request"
+                } else {
+                    "Gemma" to "On-device reasoning"
+                }
+            }
+        }
+    }
+
+    fun sendMessage(message: String, forceGemma: Boolean = false) {
         if (message.isBlank() || loading) return
-        if (handleLauncherResolution(message)) return
+        if (!forceGemma && handleLauncherResolution(message)) return
+        val normalizedMessage = if (forceGemma) {
+            message.removePrefix("gemma:").trim()
+                .removePrefix("ask gemma").trim()
+                .ifBlank { message.trim() }
+        } else {
+            message.trim()
+        }
         recordDecision(
             LauncherDecisionRecord(
-                query = message,
+                query = normalizedMessage,
                 route = "Gemma",
-                detail = "Agent reasoning",
+                detail = if (forceGemma) "Explicit Gemma route" else "Agent reasoning",
             )
         )
         loading = true
-        turns.add(ChatTurn(user = message, agent = "Working..."))
+        turns.add(
+            ChatTurn(
+                user = normalizedMessage,
+                agent = "Gemma is thinking...",
+                route = "Gemma",
+                routeDetail = if (forceGemma) "Explicit Gemma request" else "Agent reasoning",
+                pending = true,
+            )
+        )
         scope.launch {
             var status = if (backendStatus.online) backendStatus else refreshBackendLink()
             var attemptedAutoStart = false
@@ -293,12 +357,17 @@ fun LauncherApp(
             }
             if (!status.online) {
                 val reply = buildUnavailableReply(status, attemptedAutoStart)
-                turns[turns.lastIndex] = ChatTurn(user = message, agent = reply.response)
+                turns[turns.lastIndex] = ChatTurn(
+                    user = normalizedMessage,
+                    agent = reply.response,
+                    route = "Gemma",
+                    routeDetail = "Backend unavailable",
+                )
                 lastTraceSummary = reply.traceSummary
                 loading = false
                 return@launch
             }
-            var reply = runCatching { backendChat(message) }.getOrElse {
+            var reply = runCatching { backendChat(normalizedMessage) }.getOrElse {
                 backendStatus = BackendStatus(
                     checked = true,
                     online = false,
@@ -311,7 +380,7 @@ fun LauncherApp(
                 if (termuxBridgeStatus.canDispatchCommands) {
                     status = requestBackendStart(restart = true, addTurn = false)
                     reply = if (status.agentReady) {
-                        runCatching { backendChat(message) }.getOrElse {
+                        runCatching { backendChat(normalizedMessage) }.getOrElse {
                             buildUnavailableReply(status, attemptedAutoStart = true)
                         }
                     } else {
@@ -329,7 +398,13 @@ fun LauncherApp(
                     )
                 }
             }
-            turns[turns.lastIndex] = ChatTurn(user = message, agent = reply.response)
+            val (route, routeDetail) = backendRouteForReply(reply, forceGemma)
+            turns[turns.lastIndex] = ChatTurn(
+                user = normalizedMessage,
+                agent = reply.response,
+                route = route,
+                routeDetail = routeDetail,
+            )
             lastTraceSummary = reply.traceSummary
             loading = false
         }
@@ -407,6 +482,11 @@ fun LauncherApp(
                         val outgoing = input
                         input = ""
                         sendMessage(outgoing)
+                    },
+                    onAskGemma = {
+                        val outgoing = input
+                        input = ""
+                        sendMessage(outgoing, forceGemma = true)
                     }
                 )
             }
@@ -579,9 +659,15 @@ private fun ColumnScope.ChatHome(turns: List<ChatTurn>, traceVisible: Boolean, l
         LazyColumn(modifier = Modifier.fillMaxSize().padding(14.dp)) {
             items(turns) { turn ->
                 if (turn.user.isNotBlank()) {
-                    MessageBubble(text = turn.user, isUser = true)
+                    MessageBubble(text = turn.user, label = "You", detail = "", isUser = true)
                 }
-                MessageBubble(text = turn.agent, isUser = false)
+                MessageBubble(
+                    text = turn.agent,
+                    label = turn.route,
+                    detail = turn.routeDetail,
+                    isUser = false,
+                    pending = turn.pending,
+                )
             }
             if (traceVisible && lastTraceSummary.isNotEmpty()) {
                 item {
@@ -604,7 +690,13 @@ private fun ColumnScope.ChatHome(turns: List<ChatTurn>, traceVisible: Boolean, l
 }
 
 @Composable
-private fun MessageBubble(text: String, isUser: Boolean) {
+private fun MessageBubble(
+    text: String,
+    label: String,
+    detail: String,
+    isUser: Boolean,
+    pending: Boolean = false,
+) {
     val container = if (isUser) Color(0xFF8CEEDD) else Color(0xFF142734)
     val content = if (isUser) Color(0xFF041017) else Color.White
     Row(
@@ -616,13 +708,57 @@ private fun MessageBubble(text: String, isUser: Boolean) {
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = container)
         ) {
-            Text(
-                text = text,
-                color = content,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                lineHeight = 20.sp
-            )
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BubbleRouteChip(label = label, isUser = isUser, pending = pending)
+                    if (detail.isNotBlank()) {
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            detail,
+                            color = if (isUser) Color(0xFF16323B) else Color(0xFF7FA4B2),
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = text,
+                    color = content,
+                    lineHeight = 20.sp
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun BubbleRouteChip(label: String, isUser: Boolean, pending: Boolean) {
+    val containerColor = when {
+        isUser -> Color(0x3316302C)
+        pending -> Color(0x335C4B19)
+        label == "Gemma" -> Color(0x33306A58)
+        label == "Native" || label == "Phone" -> Color(0x33305A72)
+        label == "App" -> Color(0x333B4A78)
+        else -> Color(0x332D4D5C)
+    }
+    val textColor = if (isUser) Color(0xFF0B1D22) else Color(0xFFC7D9E3)
+    Box(
+        modifier = Modifier
+            .background(containerColor, RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(
+            if (pending) "$label Thinking" else label,
+            color = textColor,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
@@ -708,6 +844,7 @@ private fun CommandBar(
     backendStatus: BackendStatus,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
+    onAskGemma: () -> Unit,
 ) {
     val hint = if (backendStatus.checked && !backendStatus.online) {
         "Backend offline. Search apps or launch locally"
@@ -715,22 +852,62 @@ private fun CommandBar(
         "Search apps or ask Gemma"
     }
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xDD08141C))) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 label = { Text(hint) },
                 placeholder = { Text(hint) },
                 enabled = !loading,
                 singleLine = true
             )
-            IconButton(onClick = onSend, enabled = !loading && value.isNotBlank()) {
-                Icon(Icons.Rounded.Search, contentDescription = "Send", tint = Color(0xFF6EE7D2))
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RouteActionButton(
+                    label = "Search / Launch",
+                    icon = Icons.Rounded.Search,
+                    onClick = onSend,
+                    enabled = !loading && value.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                )
+                RouteActionButton(
+                    label = "Ask Gemma",
+                    icon = Icons.Rounded.Memory,
+                    onClick = onAskGemma,
+                    enabled = !loading && value.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun RouteActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val container = if (enabled) Color(0x55305A72) else Color(0x22305A72)
+    val tint = if (enabled) Color(0xFF6EE7D2) else Color(0xFF5A7380)
+    Card(
+        modifier = modifier.then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
+        colors = CardDefaults.cardColors(containerColor = container)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = label, tint = tint)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(label, color = if (enabled) Color.White else Color(0xFF7FA4B2), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

@@ -38,6 +38,9 @@ data class LauncherDecisionRecord(
 data class ChatTurn(
     val user: String,
     val agent: String,
+    val route: String = "Gemma",
+    val routeDetail: String = "",
+    val pending: Boolean = false,
 )
 
 data class WidgetState(
@@ -49,6 +52,7 @@ data class WidgetState(
 data class BackendReply(
     val response: String,
     val traceSummary: List<String>,
+    val mode: String = "agentic",
 )
 
 data class BackendStatus(

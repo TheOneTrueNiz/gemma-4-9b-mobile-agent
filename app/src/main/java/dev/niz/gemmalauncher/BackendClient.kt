@@ -48,12 +48,7 @@ suspend fun backendChat(message: String): BackendReply = withContext(Dispatchers
 
     OutputStreamWriter(connection.outputStream).use { it.write(payload) }
     val body = BufferedReader(connection.inputStream.reader()).use { it.readText() }
-    val json = JSONObject(body)
-
-    BackendReply(
-        response = json.optString("response", "No response"),
-        traceSummary = json.optJSONArray("trace_summary").toStringList()
-    )
+    parseBackendReply(body)
 }
 
 suspend fun refreshWidgets(status: BackendStatus? = null): List<WidgetState> {
@@ -90,6 +85,15 @@ fun parseBackendStatus(body: String): BackendStatus {
         actorOnline = actorOnline,
         actorModel = actorModel,
         detail = detail,
+    )
+}
+
+fun parseBackendReply(body: String): BackendReply {
+    val json = JSONObject(body)
+    return BackendReply(
+        response = json.optString("response", "No response"),
+        traceSummary = json.optJSONArray("trace_summary").toStringList(),
+        mode = json.optString("mode", "agentic"),
     )
 }
 
