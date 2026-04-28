@@ -72,6 +72,9 @@ fun LauncherApp(
     termuxBridgeStatus: TermuxBridgeStatus,
     refreshTermuxBridgeStatus: () -> Unit,
     requestTermuxPermission: () -> Unit,
+    openLauncherSettings: () -> Unit,
+    openTermuxSettings: () -> Unit,
+    openTermuxOverlaySettings: () -> Unit,
     openTermux: () -> Unit,
     controlBackend: (Boolean) -> String,
     launchApp: (LauncherEntry) -> Unit,
@@ -530,6 +533,9 @@ fun LauncherApp(
                         scope.launch { requestBackendStart(restart = true, addTurn = true) }
                     },
                     onGrantTermuxPermission = { requestTermuxPermission() },
+                    onOpenLauncherSettings = { openLauncherSettings() },
+                    onOpenTermuxSettings = { openTermuxSettings() },
+                    onOpenTermuxOverlaySettings = { openTermuxOverlaySettings() },
                     onOpenTermux = { openTermux() },
                     onRecall = { sendMessage("recall what you know about this project") }
                 )
@@ -1221,6 +1227,9 @@ private fun AgentSheet(
     onStartBackend: () -> Unit,
     onRestartBackend: () -> Unit,
     onGrantTermuxPermission: () -> Unit,
+    onOpenLauncherSettings: () -> Unit,
+    onOpenTermuxSettings: () -> Unit,
+    onOpenTermuxOverlaySettings: () -> Unit,
     onOpenTermux: () -> Unit,
     onRecall: () -> Unit,
 ) {
@@ -1239,6 +1248,9 @@ private fun AgentSheet(
             onStartBackend = onStartBackend,
             onRestartBackend = onRestartBackend,
             onGrantTermuxPermission = onGrantTermuxPermission,
+            onOpenLauncherSettings = onOpenLauncherSettings,
+            onOpenTermuxSettings = onOpenTermuxSettings,
+            onOpenTermuxOverlaySettings = onOpenTermuxOverlaySettings,
             onOpenTermux = onOpenTermux,
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -1313,6 +1325,9 @@ private fun BackendStatusCard(
     onStartBackend: () -> Unit,
     onRestartBackend: () -> Unit,
     onGrantTermuxPermission: () -> Unit,
+    onOpenLauncherSettings: () -> Unit,
+    onOpenTermuxSettings: () -> Unit,
+    onOpenTermuxOverlaySettings: () -> Unit,
     onOpenTermux: () -> Unit,
 ) {
     Card(
@@ -1366,15 +1381,15 @@ private fun BackendStatusCard(
                             fontSize = 11.sp,
                         )
                     }
-                        !termuxBridgeStatus.runCommandPermissionGranted -> {
-                            ControlButton(
+                    !termuxBridgeStatus.runCommandPermissionGranted -> {
+                        ControlButton(
                             label = "Grant Termux Permission",
                             onClick = onGrantTermuxPermission,
                             modifier = Modifier.weight(1f)
                         )
                         ControlButton(
-                            label = "Open Termux",
-                            onClick = onOpenTermux,
+                            label = "Launcher Settings",
+                            onClick = onOpenLauncherSettings,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -1396,6 +1411,25 @@ private fun BackendStatusCard(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "Bridge setup: 1) grant the Termux run-command permission, 2) enable allow-external-apps = true in Termux. You should not need to browse a directory picker for this flow.",
+                    color = Color(0xFF7FA4B2),
+                    fontSize = 11.sp,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    ControlButton(
+                        label = "Termux Settings",
+                        onClick = onOpenTermuxSettings,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ControlButton(
+                        label = "Termux Overlay",
+                        onClick = onOpenTermuxOverlaySettings,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "If Termux flashes a brief popup about drawing over apps, open Termux Overlay and enable it.",
                     color = Color(0xFF7FA4B2),
                     fontSize = 11.sp,
                 )

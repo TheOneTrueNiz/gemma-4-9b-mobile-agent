@@ -1,6 +1,7 @@
 package dev.niz.gemmalauncher
 
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
@@ -43,6 +44,9 @@ class MainActivity : ComponentActivity() {
                     termuxBridgeStatus = termuxBridgeStatus,
                     refreshTermuxBridgeStatus = { refreshTermuxBridgeStatus() },
                     requestTermuxPermission = { requestTermuxRunCommandPermission() },
+                    openLauncherSettings = { openLauncherSettings() },
+                    openTermuxSettings = { openTermuxSettings() },
+                    openTermuxOverlaySettings = { openTermuxOverlaySettings() },
                     openTermux = { openTermux() },
                     controlBackend = { restart -> dispatchBackendControl(restart) },
                     launchApp = { entry -> launchApp(entry) },
@@ -102,6 +106,30 @@ class MainActivity : ComponentActivity() {
 
     private fun openTermux() {
         val intent = packageManager.getLaunchIntentForPackage(TERMUX_PACKAGE_NAME) ?: return
+        startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    private fun openLauncherSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null)
+        )
+        startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    private fun openTermuxSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", TERMUX_PACKAGE_NAME, null)
+        )
+        startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    private fun openTermuxOverlaySettings() {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$TERMUX_PACKAGE_NAME")
+        )
         startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
