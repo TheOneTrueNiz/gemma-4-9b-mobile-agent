@@ -12,12 +12,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -435,27 +438,14 @@ fun LauncherApp(
                     onPhone = { overlay = OverlaySheet.Phone },
                     onDebug = { overlay = OverlaySheet.Debug }
                 )
-                Spacer(modifier = Modifier.height(10.dp))
-                HomeHero(
-                    recentActivity = recentActivity,
-                    onQuickAction = { action -> executeNativeAction(action.label, action) }
+                Spacer(modifier = Modifier.height(8.dp))
+                ChatHome(
+                    turns = turns,
+                    traceVisible = traceVisible,
+                    lastTraceSummary = lastTraceSummary,
+                    backendStatus = backendStatus,
                 )
-                Spacer(modifier = Modifier.height(10.dp))
-                ChatHome(turns = turns, traceVisible = traceVisible, lastTraceSummary = lastTraceSummary)
-                Spacer(modifier = Modifier.height(10.dp))
-                LauncherDock(
-                    dockApps = dockApps,
-                    onLaunchApp = { entry ->
-                        recordLaunch(entry)
-                        launchApp(entry)
-                    },
-                    onApps = {
-                        drawerQuery = ""
-                        drawerSuggestions = emptyList()
-                        overlay = OverlaySheet.Apps
-                    }
-                )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 if (homeSuggestions.isNotEmpty()) {
                     HomeInputSuggestionRow(
                         suggestions = homeSuggestions,
@@ -473,7 +463,7 @@ fun LauncherApp(
                             }
                         }
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
                 CommandBar(
                     value = input,
@@ -489,6 +479,19 @@ fun LauncherApp(
                         val outgoing = input
                         input = ""
                         sendMessage(outgoing, forceGemma = true)
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LauncherDock(
+                    dockApps = dockApps,
+                    onLaunchApp = { entry ->
+                        recordLaunch(entry)
+                        launchApp(entry)
+                    },
+                    onApps = {
+                        drawerQuery = ""
+                        drawerSuggestions = emptyList()
+                        overlay = OverlaySheet.Apps
                     }
                 )
             }
@@ -564,54 +567,81 @@ private fun TopStatusBar(
     onDebug: () -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xCC08141C))) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            Text("Gemma Launcher", color = Color.White, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (loading) {
-                    StatusChip("Busy")
-                }
-                StatusChip(
-                    when {
-                        !backendStatus.checked -> "Checking Link"
-                        backendStatus.online -> "Gemma Online"
-                        else -> "Gemma Offline"
-                    },
-                    containerColor = when {
-                        !backendStatus.checked -> Color(0x33405D6C)
-                        backendStatus.online -> Color(0x33448F75)
-                        else -> Color(0x33644545)
-                    }
-                )
-                if (backendStatus.checked && backendStatus.online) {
-                    StatusChip(
-                        if (backendStatus.actorOnline) "Actor Ready" else "Actor Down",
-                        containerColor = if (backendStatus.actorOnline) Color(0x33306A58) else Color(0x33635B2D)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Gemma Launcher", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Chat-first home shell",
+                        color = Color(0xFF7FA4B2),
+                        fontSize = 11.sp,
                     )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconButton(onClick = onAgent) {
+                        Icon(Icons.Rounded.Memory, contentDescription = "Agent layer", tint = Color(0xFF6EE7D2))
+                    }
+                    IconButton(onClick = onPhone) {
+                        Icon(Icons.Rounded.Android, contentDescription = "Phone layer", tint = Color(0xFF6EE7D2))
+                    }
+                    IconButton(onClick = onDebug) {
+                        Icon(Icons.Rounded.BugReport, contentDescription = "Debug layer", tint = Color(0xFF6EE7D2))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (loading) {
+                    item {
+                        StatusChip("Busy")
+                    }
+                }
+                item {
+                    StatusChip(
+                        when {
+                            !backendStatus.checked -> "Checking Link"
+                            backendStatus.online -> "Gemma Online"
+                            else -> "Gemma Offline"
+                        },
+                        containerColor = when {
+                            !backendStatus.checked -> Color(0x33405D6C)
+                            backendStatus.online -> Color(0x33448F75)
+                            else -> Color(0x33644545)
+                        }
+                    )
+                }
+                if (backendStatus.checked && backendStatus.online) {
+                    item {
+                        StatusChip(
+                            if (backendStatus.actorOnline) "Actor Ready" else "Actor Down",
+                            containerColor = if (backendStatus.actorOnline) Color(0x33306A58) else Color(0x33635B2D)
+                        )
+                    }
                 } else {
                     val bridgeLabel = when {
                         !termuxBridgeStatus.termuxInstalled -> "No Termux"
                         !termuxBridgeStatus.runCommandPermissionGranted -> "Grant Permission"
                         else -> "Bridge Ready"
                     }
-                    StatusChip(bridgeLabel, containerColor = Color(0x33305A72))
+                    item {
+                        StatusChip(bridgeLabel, containerColor = Color(0x33305A72))
+                    }
                 }
                 if (!lastRoute.isNullOrBlank()) {
-                    StatusChip("Last: $lastRoute")
-                }
-                IconButton(onClick = onAgent) {
-                    Icon(Icons.Rounded.Memory, contentDescription = "Agent layer", tint = Color(0xFF6EE7D2))
-                }
-                IconButton(onClick = onPhone) {
-                    Icon(Icons.Rounded.Android, contentDescription = "Phone layer", tint = Color(0xFF6EE7D2))
-                }
-                IconButton(onClick = onDebug) {
-                    Icon(Icons.Rounded.BugReport, contentDescription = "Debug layer", tint = Color(0xFF6EE7D2))
+                    item {
+                        StatusChip("Last: $lastRoute")
+                    }
                 }
             }
         }
@@ -619,71 +649,68 @@ private fun TopStatusBar(
 }
 
 @Composable
-private fun HomeHero(
-    recentActivity: List<LauncherActivityItem>,
-    onQuickAction: (NativeLauncherAction) -> Unit,
+private fun ColumnScope.ChatHome(
+    turns: List<ChatTurn>,
+    traceVisible: Boolean,
+    lastTraceSummary: List<String>,
+    backendStatus: BackendStatus,
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xAA0E212C))) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Text("Home Screen", color = Color(0xFF6EE7D2), fontSize = 11.sp)
-            Spacer(modifier = Modifier.height(6.dp))
-            Text("Agent-first Android launcher", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                "Human intent goes into chat. The agent mediates reasoning, tools, and app launches before touching the phone.",
-                color = Color(0xFFC7D9E3),
-                lineHeight = 20.sp
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text("Quick Actions", color = Color(0xFF6EE7D2), fontSize = 12.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-            QuickActionRow(
-                actions = HOME_QUICK_ACTIONS,
-                onQuickAction = onQuickAction
-            )
-            if (recentActivity.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("Recent Activity", color = Color(0xFF6EE7D2), fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(8.dp))
-                recentActivity.take(4).forEach { activity ->
-                    RecentActivityCard(activity = activity)
-                    Spacer(modifier = Modifier.height(6.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ColumnScope.ChatHome(turns: List<ChatTurn>, traceVisible: Boolean, lastTraceSummary: List<String>) {
     Card(
         modifier = Modifier.weight(1f),
         colors = CardDefaults.cardColors(containerColor = Color(0xAA08141C))
     ) {
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-            items(turns) { turn ->
-                if (turn.user.isNotBlank()) {
-                    MessageBubble(text = turn.user, label = "You", detail = "", isUser = true)
+        Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Chat Home", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Gemma is the main interaction layer. Search apps, launch actions, or ask for reasoning here.",
+                        color = Color(0xFF9FB8C4),
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                    )
                 }
-                MessageBubble(
-                    text = turn.agent,
-                    label = turn.route,
-                    detail = turn.routeDetail,
-                    isUser = false,
-                    pending = turn.pending,
+                StatusChip(
+                    if (backendStatus.agentReady) "Gemma Ready" else if (backendStatus.online) "Model Warming" else "Local Only",
+                    containerColor = if (backendStatus.agentReady) Color(0x33306A58) else Color(0x33305A72)
                 )
             }
-            if (traceVisible && lastTraceSummary.isNotEmpty()) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Color(0x663A2C11)),
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text("Trace Summary", color = Color(0xFFF8B84E), fontSize = 11.sp)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            lastTraceSummary.take(4).forEach {
-                                Text(it, color = Color(0xFFF7E7C0), fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .heightIn(min = 220.dp)
+            ) {
+                items(turns) { turn ->
+                    if (turn.user.isNotBlank()) {
+                        MessageBubble(text = turn.user, label = "You", detail = "", isUser = true)
+                    }
+                    MessageBubble(
+                        text = turn.agent,
+                        label = turn.route,
+                        detail = turn.routeDetail,
+                        isUser = false,
+                        pending = turn.pending,
+                    )
+                }
+                if (traceVisible && lastTraceSummary.isNotEmpty()) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0x663A2C11)),
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Trace Summary", color = Color(0xFFF8B84E), fontSize = 11.sp)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                lastTraceSummary.take(4).forEach {
+                                    Text(it, color = Color(0xFFF7E7C0), fontSize = 12.sp)
+                                }
                             }
                         }
                     }
@@ -708,7 +735,10 @@ private fun MessageBubble(
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
         Card(
-            modifier = Modifier.padding(vertical = 6.dp),
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .widthIn(max = 440.dp)
+                .padding(vertical = 6.dp),
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = container)
         ) {
@@ -774,8 +804,8 @@ private fun LauncherDock(
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xDD08141C))) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             dockApps.take(4).forEach { app ->
                 DockApp(app = app, onClick = { onLaunchApp(app) }, modifier = Modifier.weight(1f))
@@ -800,12 +830,12 @@ private fun DockAction(
         colors = CardDefaults.cardColors(containerColor = Color(0x441A3342))
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(icon, contentDescription = label, tint = Color(0xFF6EE7D2))
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(label, color = Color.White, fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(label, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -821,12 +851,12 @@ private fun DockApp(
         colors = CardDefaults.cardColors(containerColor = Color(0x441A3342))
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            AppIcon(app = app, modifier = Modifier.size(40.dp))
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            AppIcon(app = app, modifier = Modifier.size(34.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(app.label, color = Color.White, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -861,13 +891,12 @@ private fun CommandBar(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text(hint) },
                 placeholder = { Text(hint) },
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White),
                 enabled = !loading,
                 singleLine = true
             )
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -922,10 +951,15 @@ private fun HomeInputSuggestionRow(
     suggestions: List<HomeInputSuggestion>,
     onSelect: (HomeInputSuggestion) -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        suggestions.take(2).forEach { suggestion ->
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(suggestions.take(2)) { suggestion ->
             Card(
-                modifier = Modifier.weight(1f).clickable { onSelect(suggestion) },
+                modifier = Modifier
+                    .widthIn(min = 150.dp, max = 220.dp)
+                    .clickable { onSelect(suggestion) },
                 colors = CardDefaults.cardColors(containerColor = Color(0x44203846))
             ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -1306,7 +1340,7 @@ private fun PhoneSheet(
         }
         if (recentActivity.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Recent Launcher Activity", color = Color(0xFF6EE7D2), fontSize = 12.sp)
+            Text("Recent Activity", color = Color(0xFF6EE7D2), fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))
             recentActivity.take(5).forEach { activity ->
                 RecentActivityCard(activity = activity)
@@ -1487,10 +1521,15 @@ private fun QuickActionRow(
     actions: List<NativeLauncherAction>,
     onQuickAction: (NativeLauncherAction) -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        actions.forEach { action ->
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(actions) { action ->
             Card(
-                modifier = Modifier.weight(1f).clickable { onQuickAction(action) },
+                modifier = Modifier
+                    .widthIn(min = 110.dp, max = 160.dp)
+                    .clickable { onQuickAction(action) },
                 colors = CardDefaults.cardColors(containerColor = Color(0x44203846))
             ) {
                 Column(
