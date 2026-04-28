@@ -41,7 +41,14 @@ class TermuxBridgeTest {
 
     @Test
     fun buildBackendControlArgumentsAddsRestartFlag() {
-        assertArrayEquals(arrayOf("--restart"), buildBackendControlArguments(restart = true))
-        assertArrayEquals(emptyArray(), buildBackendControlArguments(restart = false))
+        assertArrayEquals(
+            arrayOf(GEMMA_BACKEND_START_SCRIPT, "--restart"),
+            buildBackendControlArguments(restart = true)
+        )
+        assertArrayEquals(
+            arrayOf(GEMMA_BACKEND_START_SCRIPT),
+            buildBackendControlArguments(restart = false)
+        )
     }
+
 }

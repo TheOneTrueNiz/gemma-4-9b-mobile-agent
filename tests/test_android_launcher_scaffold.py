@@ -137,6 +137,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("ACTION_MANAGE_OVERLAY_PERMISSION", activity)
         self.assertIn("buildTermuxBridgeStatus", termux_bridge)
         self.assertIn("GEMMA_BACKEND_START_SCRIPT", termux_bridge)
+        self.assertIn("TERMUX_BASH_PATH", termux_bridge)
         self.assertIn("com.termux.RUN_COMMAND", termux_bridge)
         self.assertIn("Settings.Panel.ACTION_INTERNET_CONNECTIVITY", activity)
         self.assertIn("MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA", activity)

@@ -13,6 +13,7 @@ private const val TERMUX_EXTRA_BACKGROUND = "com.termux.RUN_COMMAND_BACKGROUND"
 private const val TERMUX_EXTRA_COMMAND_LABEL = "com.termux.RUN_COMMAND_LABEL"
 private const val TERMUX_EXTRA_COMMAND_DESCRIPTION = "com.termux.RUN_COMMAND_DESCRIPTION"
 private const val TERMUX_EXTRA_COMMAND_HELP = "com.termux.RUN_COMMAND_HELP"
+private const val TERMUX_BASH_PATH = "/data/data/com.termux/files/usr/bin/bash"
 
 const val GEMMA_PROJECT_ROOT = "/data/data/com.termux/files/home/gemma-4-mobile-agent"
 const val GEMMA_BACKEND_START_SCRIPT = "$GEMMA_PROJECT_ROOT/tools/start_backend_from_launcher.sh"
@@ -39,7 +40,7 @@ fun buildBackendControlIntent(restart: Boolean): Intent {
     return Intent().apply {
         setClassName(TERMUX_PACKAGE_NAME, TERMUX_RUN_COMMAND_SERVICE_NAME)
         action = TERMUX_RUN_COMMAND_ACTION
-        putExtra(TERMUX_EXTRA_COMMAND_PATH, GEMMA_BACKEND_START_SCRIPT)
+        putExtra(TERMUX_EXTRA_COMMAND_PATH, TERMUX_BASH_PATH)
         putExtra(TERMUX_EXTRA_ARGUMENTS, buildBackendControlArguments(restart))
         putExtra(TERMUX_EXTRA_WORKDIR, GEMMA_PROJECT_ROOT)
         putExtra(TERMUX_EXTRA_BACKGROUND, true)
@@ -56,5 +57,9 @@ fun buildBackendControlIntent(restart: Boolean): Intent {
 }
 
 fun buildBackendControlArguments(restart: Boolean): Array<String> {
-    return if (restart) arrayOf("--restart") else emptyArray()
+    return if (restart) {
+        arrayOf(GEMMA_BACKEND_START_SCRIPT, "--restart")
+    } else {
+        arrayOf(GEMMA_BACKEND_START_SCRIPT)
+    }
 }
