@@ -40,6 +40,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -863,6 +864,7 @@ private fun CommandBar(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(hint) },
                 placeholder = { Text(hint) },
+                colors = launcherTextFieldColors(),
                 enabled = !loading,
                 singleLine = true
             )
@@ -995,7 +997,8 @@ private fun AppDrawerSheet(
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            label = { Text("Search apps") }
+            label = { Text("Search apps") },
+            colors = launcherTextFieldColors()
         )
         Spacer(modifier = Modifier.height(12.dp))
         if (normalizedQuery.isNotBlank() && bestMatch != null) {
@@ -1068,6 +1071,23 @@ private fun AppDrawerSheet(
         }
     }
 }
+
+@Composable
+private fun launcherTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color(0xFFF3FBFF),
+    disabledTextColor = Color(0xFF7FA4B2),
+    cursorColor = Color(0xFF6EE7D2),
+    focusedBorderColor = Color(0xFF6EE7D2),
+    unfocusedBorderColor = Color(0xFF3C6475),
+    disabledBorderColor = Color(0xFF24414E),
+    focusedLabelColor = Color(0xFF6EE7D2),
+    unfocusedLabelColor = Color(0xFF9FB8C4),
+    disabledLabelColor = Color(0xFF5A7380),
+    focusedPlaceholderColor = Color(0xFF9FB8C4),
+    unfocusedPlaceholderColor = Color(0xFF7FA4B2),
+    disabledPlaceholderColor = Color(0xFF5A7380),
+)
 
 @Composable
 private fun LazyRowRecentApps(
