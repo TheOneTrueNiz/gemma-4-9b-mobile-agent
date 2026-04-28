@@ -105,6 +105,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("Termux Settings", ui)
         self.assertIn("Termux Overlay", ui)
         self.assertIn("drawing over apps", ui)
+        self.assertNotIn("Open Termux", ui)
         self.assertIn("Search / Launch", ui)
         self.assertIn("Ask Gemma", ui)
         self.assertIn("Gemma is thinking...", ui)

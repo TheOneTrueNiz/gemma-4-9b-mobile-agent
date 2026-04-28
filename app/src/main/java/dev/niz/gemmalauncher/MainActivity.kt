@@ -47,7 +47,6 @@ class MainActivity : ComponentActivity() {
                     openLauncherSettings = { openLauncherSettings() },
                     openTermuxSettings = { openTermuxSettings() },
                     openTermuxOverlaySettings = { openTermuxOverlaySettings() },
-                    openTermux = { openTermux() },
                     controlBackend = { restart -> dispatchBackendControl(restart) },
                     launchApp = { entry -> launchApp(entry) },
                     launchNativeAction = { action -> launchNativeAction(action) }
@@ -102,11 +101,6 @@ class MainActivity : ComponentActivity() {
             return
         }
         runCommandPermissionLauncher.launch(TERMUX_RUN_COMMAND_PERMISSION)
-    }
-
-    private fun openTermux() {
-        val intent = packageManager.getLaunchIntentForPackage(TERMUX_PACKAGE_NAME) ?: return
-        startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     private fun openLauncherSettings() {

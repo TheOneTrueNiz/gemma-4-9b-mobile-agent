@@ -75,7 +75,6 @@ fun LauncherApp(
     openLauncherSettings: () -> Unit,
     openTermuxSettings: () -> Unit,
     openTermuxOverlaySettings: () -> Unit,
-    openTermux: () -> Unit,
     controlBackend: (Boolean) -> String,
     launchApp: (LauncherEntry) -> Unit,
     launchNativeAction: (NativeLauncherAction) -> Unit,
@@ -536,7 +535,6 @@ fun LauncherApp(
                     onOpenLauncherSettings = { openLauncherSettings() },
                     onOpenTermuxSettings = { openTermuxSettings() },
                     onOpenTermuxOverlaySettings = { openTermuxOverlaySettings() },
-                    onOpenTermux = { openTermux() },
                     onRecall = { sendMessage("recall what you know about this project") }
                 )
                 OverlaySheet.Phone -> PhoneSheet(widgets = widgets, onRefresh = {
@@ -1230,7 +1228,6 @@ private fun AgentSheet(
     onOpenLauncherSettings: () -> Unit,
     onOpenTermuxSettings: () -> Unit,
     onOpenTermuxOverlaySettings: () -> Unit,
-    onOpenTermux: () -> Unit,
     onRecall: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -1251,7 +1248,6 @@ private fun AgentSheet(
             onOpenLauncherSettings = onOpenLauncherSettings,
             onOpenTermuxSettings = onOpenTermuxSettings,
             onOpenTermuxOverlaySettings = onOpenTermuxOverlaySettings,
-            onOpenTermux = onOpenTermux,
         )
         Spacer(modifier = Modifier.height(12.dp))
         if (decisions.isNotEmpty()) {
@@ -1328,7 +1324,6 @@ private fun BackendStatusCard(
     onOpenLauncherSettings: () -> Unit,
     onOpenTermuxSettings: () -> Unit,
     onOpenTermuxOverlaySettings: () -> Unit,
-    onOpenTermux: () -> Unit,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x44203846)),
@@ -1400,8 +1395,8 @@ private fun BackendStatusCard(
                             modifier = Modifier.weight(1f)
                         )
                         ControlButton(
-                            label = "Open Termux",
-                            onClick = onOpenTermux,
+                            label = "Termux Settings",
+                            onClick = onOpenTermuxSettings,
                             modifier = Modifier.weight(1f)
                         )
                     }
