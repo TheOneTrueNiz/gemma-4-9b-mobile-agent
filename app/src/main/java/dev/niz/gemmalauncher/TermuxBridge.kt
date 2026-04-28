@@ -24,8 +24,8 @@ fun buildTermuxBridgeStatus(
 ): TermuxBridgeStatus {
     val detail = detailOverride ?: when {
         !termuxInstalled -> "Termux is not installed. The launcher can still route native apps and phone actions."
-        !runCommandPermissionGranted -> "Grant Gemma Launcher the Termux Run Command permission so it can start Gemma automatically."
-        else -> "Launcher can ask Termux to start or restart the Gemma backend."
+        !runCommandPermissionGranted -> "Grant Gemma Launcher the Android permission 'Run commands in Termux environment'."
+        else -> "Launcher can ask Termux to start or restart Gemma. You should not need to browse any directories."
     }
     return TermuxBridgeStatus(
         termuxInstalled = termuxInstalled,

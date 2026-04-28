@@ -18,7 +18,7 @@ class TermuxBridgeTest {
         assertTrue(status.runCommandPermissionGranted)
         assertTrue(status.canDispatchCommands)
         assertEquals(
-            "Launcher can ask Termux to start or restart the Gemma backend.",
+            "Launcher can ask Termux to start or restart Gemma. You should not need to browse any directories.",
             status.detail,
         )
     }
@@ -34,7 +34,7 @@ class TermuxBridgeTest {
         assertFalse(status.runCommandPermissionGranted)
         assertFalse(status.canDispatchCommands)
         assertEquals(
-            "Grant Gemma Launcher the Termux Run Command permission so it can start Gemma automatically.",
+            "Grant Gemma Launcher the Android permission 'Run commands in Termux environment'.",
             status.detail,
         )
     }

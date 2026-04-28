@@ -139,9 +139,7 @@ What they do:
 
 Launcher-managed backend setup:
 ```bash
-mkdir -p ~/.termux
-printf 'allow-external-apps=true\n' >> ~/.termux/termux.properties
-termux-reload-settings
+./tools/configure_termux_bridge.sh
 ```
 
 Android-side requirement:
@@ -149,6 +147,13 @@ Android-side requirement:
 
 Without those two pieces, the launcher can still work as a native home shell, but
 it will not be able to spin Gemma up automatically through Termux.
+
+Equivalent manual setting if needed:
+```bash
+mkdir -p ~/.termux
+printf 'allow-external-apps = true\n' >> ~/.termux/termux.properties
+termux-reload-settings
+```
 
 Arm64 / aarch64 Linux note:
 ```bash

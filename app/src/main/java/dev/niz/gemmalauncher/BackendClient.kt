@@ -82,7 +82,7 @@ fun parseBackendStatus(body: String): BackendStatus {
     val detail = when {
         !online -> "Backend reported an unhealthy state."
         actorOnline -> "Agent runtime is reachable."
-        else -> "Agent runtime is offline. Local launcher paths still work."
+        else -> "Backend is reachable, but the actor model is not ready yet."
     }
     return BackendStatus(
         checked = true,

@@ -129,6 +129,14 @@ SERVER_BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), "./llama-se
 actor_process = None
 actor_online = False
 
+
+def actor_healthcheck():
+    try:
+        res = requests.get(f"http://localhost:{MODELS['actor']['port']}/health", timeout=2)
+        return res.status_code == 200
+    except Exception:
+        return False
+
 def start_engine(name, config):
     print(f"--- Launching {name.upper()} Engine ---")
     cmd = [
@@ -161,6 +169,10 @@ def ensure_actor_engine():
     if actor_online:
         return True
 
+    actor_online = actor_healthcheck()
+    if actor_online:
+        return True
+
     if not os.path.exists(SERVER_BIN):
         print(f"⚠️ llama-server binary not found at {SERVER_BIN}")
         return False
@@ -169,12 +181,13 @@ def ensure_actor_engine():
         print(f"⚠️ actor model not found at {MODELS['actor']['path']}")
         return False
 
+    # Do not spawn duplicate llama-server processes while an actor launch is
+    # already in progress. Health callers can poll until the process becomes ready.
+    if actor_process and actor_process.poll() is None:
+        return False
+
     actor_process = start_engine("actor", MODELS["actor"])
-    try:
-        res = requests.get(f"http://localhost:{MODELS['actor']['port']}/health", timeout=2)
-        actor_online = res.status_code == 200
-    except Exception:
-        actor_online = False
+    actor_online = actor_healthcheck()
     return actor_online
 
 
@@ -364,14 +377,6 @@ async def chat(request: ChatRequest):
         "type": "request",
         "message": request.message,
     }]
-    if not ensure_actor_engine():
-        return make_response(
-            "Error: actor engine is offline. Check the model path and llama-server binary.",
-            trace=trace + [{"type": "engine", "status": "offline"}],
-            request_id=request_id,
-            request_duration_ms=int((time.time() - request_started_at) * 1000),
-        )
-    
     # 1. Fast-Path
     fast_response = router.route(request.message)
     if fast_response: 
@@ -380,6 +385,14 @@ async def chat(request: ChatRequest):
             fast_response["response"],
             trace=trace + fast_response.get("trace", []),
             mode="fast_path",
+            request_id=request_id,
+            request_duration_ms=int((time.time() - request_started_at) * 1000),
+        )
+
+    if not ensure_actor_engine():
+        return make_response(
+            "Error: actor engine is offline. Check the model path and llama-server binary.",
+            trace=trace + [{"type": "engine", "status": "offline"}],
             request_id=request_id,
             request_duration_ms=int((time.time() - request_started_at) * 1000),
         )

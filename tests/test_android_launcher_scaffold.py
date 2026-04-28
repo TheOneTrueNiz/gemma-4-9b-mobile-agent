@@ -35,6 +35,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "tools/bootstrap_android_sdk.sh",
             "tools/build_android_launcher.sh",
             "tools/install_android_launcher.sh",
+            "tools/configure_termux_bridge.sh",
             "tools/start_backend_from_launcher.sh",
         ]:
             self.assertTrue((ROOT / rel).exists(), rel)
@@ -99,8 +100,9 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("Refresh Link", ui)
         self.assertIn("Start Gemma", ui)
         self.assertIn("Restart Gemma", ui)
-        self.assertIn("Grant Access", ui)
-        self.assertIn("allow-external-apps=true", ui)
+        self.assertIn("Grant Termux Permission", ui)
+        self.assertIn("allow-external-apps = true", ui)
+        self.assertIn("configure_termux_bridge.sh", ui)
         self.assertIn("Last: $lastRoute", ui)
         self.assertIn("Backend offline. Search apps or launch locally", ui)
         self.assertIn("Search apps or ask Gemma", ui)
@@ -161,6 +163,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         env_script = (ROOT / "tools/check_android_launcher_env.sh").read_text()
         sdk_bootstrap = (ROOT / "tools/bootstrap_android_sdk.sh").read_text()
         build_script = (ROOT / "tools/build_android_launcher.sh").read_text()
+        configure_script = (ROOT / "tools/configure_termux_bridge.sh").read_text()
         install_script = (ROOT / "tools/install_android_launcher.sh").read_text()
         start_script = (ROOT / "tools/start_backend_from_launcher.sh").read_text()
         self.assertIn("gradle-8.7-bin.zip", wrapper)
@@ -173,12 +176,15 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn('"build-tools;34.0.0"', sdk_bootstrap)
         self.assertIn(':app:assembleDebug', build_script)
         self.assertIn("android.aapt2FromMavenOverride", build_script)
+        self.assertIn("allow-external-apps = true", configure_script)
+        self.assertIn("termux-reload-settings", configure_script)
         self.assertIn("android.intent.action.VIEW", install_script)
         self.assertIn("application/vnd.android.package-archive", install_script)
         self.assertIn("am start --user 0", install_script)
         self.assertIn("termux-open", install_script)
         self.assertIn("Gemma Launcher", install_script)
         self.assertIn("backend/main.py", start_script)
+        self.assertIn("actor_online", start_script)
         self.assertIn("--restart", start_script)
         self.assertIn("127.0.0.1:1337/health", start_script)
 

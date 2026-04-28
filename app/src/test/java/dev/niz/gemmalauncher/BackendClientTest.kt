@@ -28,6 +28,7 @@ class BackendClientTest {
         assertTrue(status.checked)
         assertTrue(status.online)
         assertFalse(status.actorOnline)
-        assertEquals("Agent runtime is offline. Local launcher paths still work.", status.detail)
+        assertEquals("Backend is reachable, but the actor model is not ready yet.", status.detail)
+        assertFalse(status.agentReady)
     }
 }

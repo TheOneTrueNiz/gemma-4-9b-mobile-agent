@@ -108,23 +108,6 @@ fun LauncherApp(
         )
     }
 
-    LaunchedEffect(Unit) {
-        apps = appSource()
-        usageSnapshot = usageStore.snapshot()
-        backendStatus = fetchBackendStatus()
-        if (!backendStatus.online && termuxBridgeStatus.canDispatchCommands) {
-            controlBackend(false)
-            for (attempt in 1..20) {
-                delay(1500)
-                backendStatus = fetchBackendStatus()
-                if (backendStatus.online) {
-                    break
-                }
-            }
-        }
-        widgets = refreshWidgets(backendStatus)
-    }
-
     fun recordLaunch(entry: LauncherEntry) {
         usageStore.recordLaunch(entry.packageName)
         usageSnapshot = usageStore.snapshot()
@@ -241,36 +224,52 @@ fun LauncherApp(
             "launcher: $bridgeMessage",
             "termux: ${termuxBridgeStatus.detail}",
         )
-        for (attempt in 1..20) {
+        for (attempt in 1..30) {
             delay(1500)
             val status = refreshBackendLink(refreshWidgetsToo = true)
-            if (status.online) {
+            if (status.agentReady) {
                 return status
             }
         }
         return backendStatus
     }
 
-    fun buildOfflineReply(status: BackendStatus, attemptedAutoStart: Boolean): BackendReply {
+    fun buildUnavailableReply(status: BackendStatus, attemptedAutoStart: Boolean): BackendReply {
         val detail = status.detail.ifBlank { "Backend unavailable" }
+        val actorUnavailable = status.online && !status.actorOnline
         val guidance = when {
             !termuxBridgeStatus.termuxInstalled ->
                 "Install Termux to let the launcher manage Gemma."
             !termuxBridgeStatus.runCommandPermissionGranted ->
-                "Grant Gemma Launcher the Termux Run Command permission, then retry."
+                "Grant Gemma Launcher the Android permission to run commands in Termux, then retry."
             attemptedAutoStart ->
-                "The launcher asked Termux to start Gemma, but the backend is still offline. Open Termux and set allow-external-apps=true in ~/.termux/termux.properties, then restart Termux."
+                "The launcher asked Termux to restore Gemma, but the model is still not ready. Run ./tools/configure_termux_bridge.sh in Termux if needed, then retry."
             else ->
-                "Tap Start Gemma or open Termux, then retry."
+                "Use Start Gemma or Restart Gemma from the agent layer, then retry."
         }
         return BackendReply(
-            response = "Gemma backend is offline. $guidance",
+            response = if (actorUnavailable) {
+                "Gemma backend is up, but the actor model is not ready. $guidance"
+            } else {
+                "Gemma backend is offline. $guidance"
+            },
             traceSummary = listOf(
-                "launcher: backend offline",
+                if (actorUnavailable) "launcher: actor unavailable" else "launcher: backend offline",
                 "detail: $detail",
                 "termux: ${termuxBridgeStatus.detail}",
             )
         )
+    }
+
+    LaunchedEffect(Unit) {
+        apps = appSource()
+        usageSnapshot = usageStore.snapshot()
+        backendStatus = fetchBackendStatus()
+        if (!backendStatus.agentReady && termuxBridgeStatus.canDispatchCommands) {
+            val shouldRestart = backendStatus.online && !backendStatus.actorOnline
+            backendStatus = requestBackendStart(restart = shouldRestart, addTurn = false)
+        }
+        widgets = refreshWidgets(backendStatus)
     }
 
     fun sendMessage(message: String) {
@@ -293,20 +292,42 @@ fun LauncherApp(
                 status = requestBackendStart(restart = false, addTurn = false)
             }
             if (!status.online) {
-                val reply = buildOfflineReply(status, attemptedAutoStart)
+                val reply = buildUnavailableReply(status, attemptedAutoStart)
                 turns[turns.lastIndex] = ChatTurn(user = message, agent = reply.response)
                 lastTraceSummary = reply.traceSummary
                 loading = false
                 return@launch
             }
-            val reply = runCatching { backendChat(message) }.getOrElse {
+            var reply = runCatching { backendChat(message) }.getOrElse {
                 backendStatus = BackendStatus(
                     checked = true,
                     online = false,
                     actorOnline = false,
                     detail = it.message ?: "Backend unavailable",
                 )
-                buildOfflineReply(backendStatus, attemptedAutoStart = false)
+                buildUnavailableReply(backendStatus, attemptedAutoStart = false)
+            }
+            if (reply.response.startsWith("Error: actor engine is offline")) {
+                if (termuxBridgeStatus.canDispatchCommands) {
+                    status = requestBackendStart(restart = true, addTurn = false)
+                    reply = if (status.agentReady) {
+                        runCatching { backendChat(message) }.getOrElse {
+                            buildUnavailableReply(status, attemptedAutoStart = true)
+                        }
+                    } else {
+                        buildUnavailableReply(status, attemptedAutoStart = true)
+                    }
+                } else {
+                    reply = buildUnavailableReply(
+                        BackendStatus(
+                            checked = true,
+                            online = true,
+                            actorOnline = false,
+                            detail = "Backend is reachable, but the actor model is not ready yet.",
+                        ),
+                        attemptedAutoStart = false,
+                    )
+                }
             }
             turns[turns.lastIndex] = ChatTurn(user = message, agent = reply.response)
             lastTraceSummary = reply.traceSummary
@@ -491,7 +512,7 @@ private fun TopStatusBar(
                 } else {
                     val bridgeLabel = when {
                         !termuxBridgeStatus.termuxInstalled -> "No Termux"
-                        !termuxBridgeStatus.runCommandPermissionGranted -> "Grant Access"
+                        !termuxBridgeStatus.runCommandPermissionGranted -> "Grant Permission"
                         else -> "Bridge Ready"
                     }
                     StatusChip(bridgeLabel, containerColor = Color(0x33305A72))
@@ -1168,9 +1189,9 @@ private fun BackendStatusCard(
                             fontSize = 11.sp,
                         )
                     }
-                    !termuxBridgeStatus.runCommandPermissionGranted -> {
-                        ControlButton(
-                            label = "Grant Access",
+                        !termuxBridgeStatus.runCommandPermissionGranted -> {
+                            ControlButton(
+                            label = "Grant Termux Permission",
                             onClick = onGrantTermuxPermission,
                             modifier = Modifier.weight(1f)
                         )
@@ -1182,8 +1203,8 @@ private fun BackendStatusCard(
                     }
                     else -> {
                         ControlButton(
-                            label = if (status.online) "Restart Gemma" else "Start Gemma",
-                            onClick = if (status.online) onRestartBackend else onStartBackend,
+                            label = if (status.agentReady) "Restart Gemma" else if (status.online) "Recover Model" else "Start Gemma",
+                            onClick = if (status.agentReady || status.online) onRestartBackend else onStartBackend,
                             modifier = Modifier.weight(1f)
                         )
                         ControlButton(
@@ -1197,7 +1218,7 @@ private fun BackendStatusCard(
             if (termuxBridgeStatus.canDispatchCommands) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "If backend start fails, open Termux and set allow-external-apps=true in ~/.termux/termux.properties, then restart Termux.",
+                    "Bridge setup: 1) grant the Termux run-command permission, 2) enable allow-external-apps = true in Termux. You should not need to browse a directory picker for this flow.",
                     color = Color(0xFF7FA4B2),
                     fontSize = 11.sp,
                 )

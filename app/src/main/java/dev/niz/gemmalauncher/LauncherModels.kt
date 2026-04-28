@@ -57,7 +57,10 @@ data class BackendStatus(
     val actorOnline: Boolean = false,
     val actorModel: String? = null,
     val detail: String = "Checking launcher link.",
-)
+) {
+    val agentReady: Boolean
+        get() = online && actorOnline
+}
 
 data class TermuxBridgeStatus(
     val termuxInstalled: Boolean = false,
