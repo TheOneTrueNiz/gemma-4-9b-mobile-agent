@@ -17,6 +17,13 @@ private const val TERMUX_BASH_PATH = "/data/data/com.termux/files/usr/bin/bash"
 
 const val GEMMA_PROJECT_ROOT = "/data/data/com.termux/files/home/gemma-4-mobile-agent"
 const val GEMMA_BACKEND_START_SCRIPT = "$GEMMA_PROJECT_ROOT/tools/start_backend_from_launcher.sh"
+const val GEMMA_BACKEND_STOP_SCRIPT = "$GEMMA_PROJECT_ROOT/tools/stop_backend_from_launcher.sh"
+
+enum class BackendControlAction {
+    Start,
+    Restart,
+    Stop,
+}
 
 fun buildTermuxBridgeStatus(
     termuxInstalled: Boolean,
@@ -26,7 +33,7 @@ fun buildTermuxBridgeStatus(
     val detail = detailOverride ?: when {
         !termuxInstalled -> "Termux is not installed. The launcher can still route native apps and phone actions."
         !runCommandPermissionGranted -> "Grant Gemma Launcher the Android permission 'Run commands in Termux environment'."
-        else -> "Launcher can ask Termux to start or restart Gemma. You should not need to browse any directories."
+        else -> "Launcher can start, restart, and stop Gemma through Termux. You should not need to browse any directories."
     }
     return TermuxBridgeStatus(
         termuxInstalled = termuxInstalled,
@@ -36,18 +43,29 @@ fun buildTermuxBridgeStatus(
     )
 }
 
-fun buildBackendControlIntent(restart: Boolean): Intent {
+fun buildBackendControlIntent(controlAction: BackendControlAction): Intent {
     return Intent().apply {
         setClassName(TERMUX_PACKAGE_NAME, TERMUX_RUN_COMMAND_SERVICE_NAME)
-        action = TERMUX_RUN_COMMAND_ACTION
+        this.action = TERMUX_RUN_COMMAND_ACTION
         putExtra(TERMUX_EXTRA_COMMAND_PATH, TERMUX_BASH_PATH)
-        putExtra(TERMUX_EXTRA_ARGUMENTS, buildBackendControlArguments(restart))
+        putExtra(TERMUX_EXTRA_ARGUMENTS, buildBackendControlArguments(controlAction))
         putExtra(TERMUX_EXTRA_WORKDIR, GEMMA_PROJECT_ROOT)
         putExtra(TERMUX_EXTRA_BACKGROUND, true)
-        putExtra(TERMUX_EXTRA_COMMAND_LABEL, if (restart) "Restart Gemma backend" else "Start Gemma backend")
+        putExtra(
+            TERMUX_EXTRA_COMMAND_LABEL,
+            when (controlAction) {
+                BackendControlAction.Start -> "Start Gemma backend"
+                BackendControlAction.Restart -> "Restart Gemma backend"
+                BackendControlAction.Stop -> "Stop Gemma backend"
+            }
+        )
         putExtra(
             TERMUX_EXTRA_COMMAND_DESCRIPTION,
-            "Starts the local Gemma backend for the launcher."
+            when (controlAction) {
+                BackendControlAction.Start -> "Starts the local Gemma backend for the launcher."
+                BackendControlAction.Restart -> "Restarts the local Gemma backend for the launcher."
+                BackendControlAction.Stop -> "Stops the local Gemma backend for the launcher."
+            }
         )
         putExtra(
             TERMUX_EXTRA_COMMAND_HELP,
@@ -56,10 +74,10 @@ fun buildBackendControlIntent(restart: Boolean): Intent {
     }
 }
 
-fun buildBackendControlArguments(restart: Boolean): Array<String> {
-    return if (restart) {
-        arrayOf(GEMMA_BACKEND_START_SCRIPT, "--restart")
-    } else {
-        arrayOf(GEMMA_BACKEND_START_SCRIPT)
+fun buildBackendControlArguments(controlAction: BackendControlAction): Array<String> {
+    return when (controlAction) {
+        BackendControlAction.Start -> arrayOf(GEMMA_BACKEND_START_SCRIPT)
+        BackendControlAction.Restart -> arrayOf(GEMMA_BACKEND_START_SCRIPT, "--restart")
+        BackendControlAction.Stop -> arrayOf(GEMMA_BACKEND_STOP_SCRIPT)
     }
 }

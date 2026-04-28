@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -18,6 +20,10 @@ import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
     private var termuxBridgeStatus by mutableStateOf(TermuxBridgeStatus())
+    private val backendStopHandler = Handler(Looper.getMainLooper())
+    private val backendStopRunnable = Runnable {
+        dispatchBackendControl(BackendControlAction.Stop, refreshStatusAfter = false)
+    }
 
     private val runCommandPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -47,12 +53,38 @@ class MainActivity : ComponentActivity() {
                     openLauncherSettings = { openLauncherSettings() },
                     openTermuxSettings = { openTermuxSettings() },
                     openTermuxOverlaySettings = { openTermuxOverlaySettings() },
-                    controlBackend = { restart -> dispatchBackendControl(restart) },
+                    controlBackend = { restart ->
+                        dispatchBackendControl(
+                            if (restart) BackendControlAction.Restart else BackendControlAction.Start
+                        )
+                    },
                     launchApp = { entry -> launchApp(entry) },
                     launchNativeAction = { action -> launchNativeAction(action) }
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        backendStopHandler.removeCallbacks(backendStopRunnable)
+        maybeStartBackendForLauncher()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            backendStopHandler.removeCallbacks(backendStopRunnable)
+            backendStopHandler.postDelayed(backendStopRunnable, BACKEND_STOP_DELAY_MS)
+        }
+    }
+
+    override fun onDestroy() {
+        backendStopHandler.removeCallbacks(backendStopRunnable)
+        if (isFinishing) {
+            dispatchBackendControl(BackendControlAction.Stop, refreshStatusAfter = false)
+        }
+        super.onDestroy()
     }
 
     private fun loadLaunchableApps(): List<LauncherEntry> {
@@ -127,7 +159,17 @@ class MainActivity : ComponentActivity() {
         startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    private fun dispatchBackendControl(restart: Boolean): String {
+    private fun maybeStartBackendForLauncher() {
+        refreshTermuxBridgeStatus()
+        if (termuxBridgeStatus.canDispatchCommands) {
+            dispatchBackendControl(BackendControlAction.Start, refreshStatusAfter = false)
+        }
+    }
+
+    private fun dispatchBackendControl(
+        action: BackendControlAction,
+        refreshStatusAfter: Boolean = true,
+    ): String {
         refreshTermuxBridgeStatus()
         if (!termuxBridgeStatus.termuxInstalled) {
             return termuxBridgeStatus.detail
@@ -137,25 +179,31 @@ class MainActivity : ComponentActivity() {
         }
 
         return try {
-            val component = startService(buildBackendControlIntent(restart))
+            val component = startService(buildBackendControlIntent(action))
             val detail = if (component != null) {
-                if (restart) {
-                    "Sent restart request to Termux."
-                } else {
-                    "Sent start request to Termux."
+                when (action) {
+                    BackendControlAction.Start -> "Sent start request to Termux."
+                    BackendControlAction.Restart -> "Sent restart request to Termux."
+                    BackendControlAction.Stop -> "Sent stop request to Termux."
                 }
             } else {
                 "Termux did not accept the backend control request."
             }
-            refreshTermuxBridgeStatus(detail)
+            if (refreshStatusAfter) {
+                refreshTermuxBridgeStatus(detail)
+            }
             detail
         } catch (error: SecurityException) {
             val detail = "Launcher cannot control Termux yet: ${error.message ?: "permission denied"}"
-            refreshTermuxBridgeStatus(detail)
+            if (refreshStatusAfter) {
+                refreshTermuxBridgeStatus(detail)
+            }
             detail
         } catch (error: Exception) {
             val detail = "Failed to send backend control request: ${error.message ?: "unknown error"}"
-            refreshTermuxBridgeStatus(detail)
+            if (refreshStatusAfter) {
+                refreshTermuxBridgeStatus(detail)
+            }
             detail
         }
     }
@@ -169,6 +217,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private const val BACKEND_STOP_DELAY_MS = 15_000L
 
 private fun LauncherActivityInfo.toEntry(): LauncherEntry {
     val resolvedLabel = label?.toString() ?: applicationInfo.packageName

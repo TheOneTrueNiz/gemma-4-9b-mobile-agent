@@ -18,7 +18,7 @@ class TermuxBridgeTest {
         assertTrue(status.runCommandPermissionGranted)
         assertTrue(status.canDispatchCommands)
         assertEquals(
-            "Launcher can ask Termux to start or restart Gemma. You should not need to browse any directories.",
+            "Launcher can start, restart, and stop Gemma through Termux. You should not need to browse any directories.",
             status.detail,
         )
     }
@@ -40,14 +40,18 @@ class TermuxBridgeTest {
     }
 
     @Test
-    fun buildBackendControlArgumentsAddsRestartFlag() {
+    fun buildBackendControlArgumentsSupportsStartRestartAndStop() {
         assertArrayEquals(
             arrayOf(GEMMA_BACKEND_START_SCRIPT, "--restart"),
-            buildBackendControlArguments(restart = true)
+            buildBackendControlArguments(BackendControlAction.Restart)
         )
         assertArrayEquals(
             arrayOf(GEMMA_BACKEND_START_SCRIPT),
-            buildBackendControlArguments(restart = false)
+            buildBackendControlArguments(BackendControlAction.Start)
+        )
+        assertArrayEquals(
+            arrayOf(GEMMA_BACKEND_STOP_SCRIPT),
+            buildBackendControlArguments(BackendControlAction.Stop)
         )
     }
 

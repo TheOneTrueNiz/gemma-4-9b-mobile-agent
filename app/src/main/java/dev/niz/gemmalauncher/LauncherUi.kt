@@ -300,11 +300,16 @@ fun LauncherApp(
         apps = appSource()
         usageSnapshot = usageStore.snapshot()
         backendStatus = fetchBackendStatus()
-        if (!backendStatus.agentReady && termuxBridgeStatus.canDispatchCommands) {
-            val shouldRestart = backendStatus.online && !backendStatus.actorOnline
-            backendStatus = requestBackendStart(restart = shouldRestart, addTurn = false)
-        }
         widgets = refreshWidgets(backendStatus)
+        if (!backendStatus.agentReady && termuxBridgeStatus.canDispatchCommands) {
+            repeat(30) {
+                delay(1500)
+                val refreshed = refreshBackendLink(refreshWidgetsToo = true)
+                if (refreshed.agentReady) {
+                    return@LaunchedEffect
+                }
+            }
+        }
     }
 
     fun backendRouteForReply(reply: BackendReply, forcedGemma: Boolean): Pair<String, String> {

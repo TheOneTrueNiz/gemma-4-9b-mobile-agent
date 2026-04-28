@@ -37,6 +37,7 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
             "tools/install_android_launcher.sh",
             "tools/configure_termux_bridge.sh",
             "tools/start_backend_from_launcher.sh",
+            "tools/stop_backend_from_launcher.sh",
         ]:
             self.assertTrue((ROOT / rel).exists(), rel)
 
@@ -135,10 +136,17 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("TERMUX_RUN_COMMAND_PERMISSION", activity)
         self.assertIn("ACTION_APPLICATION_DETAILS_SETTINGS", activity)
         self.assertIn("ACTION_MANAGE_OVERLAY_PERMISSION", activity)
+        self.assertIn("onStart()", activity)
+        self.assertIn("onStop()", activity)
+        self.assertIn("BackendControlAction.Stop", activity)
+        self.assertIn("maybeStartBackendForLauncher", activity)
+        self.assertIn("BACKEND_STOP_DELAY_MS", activity)
         self.assertIn("buildTermuxBridgeStatus", termux_bridge)
         self.assertIn("GEMMA_BACKEND_START_SCRIPT", termux_bridge)
+        self.assertIn("GEMMA_BACKEND_STOP_SCRIPT", termux_bridge)
         self.assertIn("TERMUX_BASH_PATH", termux_bridge)
         self.assertIn("com.termux.RUN_COMMAND", termux_bridge)
+        self.assertIn("BackendControlAction", termux_bridge)
         self.assertIn("Settings.Panel.ACTION_INTERNET_CONNECTIVITY", activity)
         self.assertIn("MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA", activity)
 
@@ -201,6 +209,8 @@ class AndroidLauncherScaffoldTests(unittest.TestCase):
         self.assertIn("actor_online", start_script)
         self.assertIn("--restart", start_script)
         self.assertIn("127.0.0.1:1337/health", start_script)
+        self.assertIn("pkill -f", start_script)
+        self.assertIn("pkill -f", (ROOT / "tools/stop_backend_from_launcher.sh").read_text())
 
 
 if __name__ == "__main__":
