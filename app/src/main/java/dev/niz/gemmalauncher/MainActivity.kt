@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
     private val backendStopRunnable = Runnable {
         dispatchBackendControl(BackendControlAction.Stop, refreshStatusAfter = false)
     }
+    private var autoPermissionRequested = false
 
     private val runCommandPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -33,7 +34,7 @@ class MainActivity : ComponentActivity() {
                 detailOverride = if (granted) {
                     "Termux Run Command access granted."
                 } else {
-                    "Grant Termux Run Command access so the launcher can start Gemma automatically."
+                    "Grant Termux Run Command access so the launcher can start Gemma automatically. If Android does not show a dialog, use Launcher Settings."
                 }
             )
         }
@@ -68,6 +69,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         backendStopHandler.removeCallbacks(backendStopRunnable)
+        maybeRequestTermuxRunCommandPermission()
         maybeStartBackendForLauncher()
     }
 
@@ -132,14 +134,24 @@ class MainActivity : ComponentActivity() {
             refreshTermuxBridgeStatus("Termux is not installed.")
             return
         }
+        autoPermissionRequested = true
         runCommandPermissionLauncher.launch(TERMUX_RUN_COMMAND_PERMISSION)
     }
 
     private fun openLauncherSettings() {
-        val intent = Intent(
+        val directPermissionsIntent = Intent(ACTION_MANAGE_APP_PERMISSIONS).apply {
+            putExtra(Intent.EXTRA_PACKAGE_NAME, packageName)
+            data = Uri.fromParts("package", packageName, null)
+        }
+        val fallbackIntent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             Uri.fromParts("package", packageName, null)
         )
+        val intent = if (directPermissionsIntent.resolveActivity(packageManager) != null) {
+            directPermissionsIntent
+        } else {
+            fallbackIntent
+        }
         startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
@@ -164,6 +176,18 @@ class MainActivity : ComponentActivity() {
         if (termuxBridgeStatus.canDispatchCommands) {
             dispatchBackendControl(BackendControlAction.Start, refreshStatusAfter = false)
         }
+    }
+
+    private fun maybeRequestTermuxRunCommandPermission() {
+        refreshTermuxBridgeStatus()
+        if (!termuxBridgeStatus.termuxInstalled || termuxBridgeStatus.runCommandPermissionGranted) {
+            return
+        }
+        if (autoPermissionRequested) {
+            return
+        }
+        autoPermissionRequested = true
+        runCommandPermissionLauncher.launch(TERMUX_RUN_COMMAND_PERMISSION)
     }
 
     private fun dispatchBackendControl(
@@ -218,6 +242,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private const val ACTION_MANAGE_APP_PERMISSIONS = "android.intent.action.MANAGE_APP_PERMISSIONS"
 private const val BACKEND_STOP_DELAY_MS = 15_000L
 
 private fun LauncherActivityInfo.toEntry(): LauncherEntry {
