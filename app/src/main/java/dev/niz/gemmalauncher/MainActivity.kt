@@ -6,8 +6,6 @@ import android.content.pm.PackageManager
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.MediaStore
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -20,10 +18,6 @@ import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
     private var termuxBridgeStatus by mutableStateOf(TermuxBridgeStatus())
-    private val backendStopHandler = Handler(Looper.getMainLooper())
-    private val backendStopRunnable = Runnable {
-        dispatchBackendControl(BackendControlAction.Stop, refreshStatusAfter = false)
-    }
     private var autoPermissionRequested = false
 
     private val runCommandPermissionLauncher =
@@ -68,21 +62,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        backendStopHandler.removeCallbacks(backendStopRunnable)
         maybeRequestTermuxRunCommandPermission()
         maybeStartBackendForLauncher()
     }
 
-    override fun onStop() {
-        super.onStop()
-        if (!isChangingConfigurations) {
-            backendStopHandler.removeCallbacks(backendStopRunnable)
-            backendStopHandler.postDelayed(backendStopRunnable, BACKEND_STOP_DELAY_MS)
-        }
-    }
-
     override fun onDestroy() {
-        backendStopHandler.removeCallbacks(backendStopRunnable)
         if (isFinishing) {
             dispatchBackendControl(BackendControlAction.Stop, refreshStatusAfter = false)
         }
@@ -243,7 +227,6 @@ class MainActivity : ComponentActivity() {
 }
 
 private const val ACTION_MANAGE_APP_PERMISSIONS = "android.intent.action.MANAGE_APP_PERMISSIONS"
-private const val BACKEND_STOP_DELAY_MS = 15_000L
 
 private fun LauncherActivityInfo.toEntry(): LauncherEntry {
     val resolvedLabel = label?.toString() ?: applicationInfo.packageName
